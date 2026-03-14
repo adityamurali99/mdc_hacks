@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+anthropic
+pypdf
+python-multipart
+httpx
+fuzzywuzzy
+python-Levenshtein
+python-dotenv
+pydantic
