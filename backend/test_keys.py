@@ -30,3 +30,5 @@ def test_rentcast():
 if __name__ == "__main__":
     test_rentcast()
     print("Gemini Key Loaded:", "✅" if os.getenv("GEMINI_API_KEY") != "your_gemini_key_here" else "❌")
+
+    
