@@ -8,3 +8,9 @@ fuzzywuzzy
 python-Levenshtein
 python-dotenv
 pydantic
+streamlit
+crewai
+langchain-google-genai
+requests
+python-whois
+googlemaps
