@@ -26,8 +26,9 @@ Return ONLY valid JSON in exactly this format:
 async def check_property_data(zip_code: str, asking_rent: str, listing_address: str, office_address: str) -> dict:
     try:
         # 1. Run your Python tools to get the hard data
-        market_data = get_market_rent(zip_code)
-        commute_data = get_commute_time(listing_address, office_address)
+        # Note: crewai @tool decorator returns a Tool object, so use .run()
+        market_data = get_market_rent.run(zip_code)
+        commute_data = get_commute_time.run(listing_address, office_address)
 
         # 2. Package it up for OpenAI to analyze
         user_prompt = f"""
