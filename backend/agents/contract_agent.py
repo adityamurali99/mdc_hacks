@@ -1,9 +1,14 @@
-import anthropic
 import os
-from pypdf import PdfReader
 import io
+import json
+from pypdf import PdfReader
+from openai import AsyncOpenAI
+from dotenv import load_dotenv
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+load_dotenv()
+
+# Initialize the async OpenAI client using your .env file
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SYSTEM_PROMPT = """
 You are a lease fraud detection agent specializing in off-campus housing 
@@ -73,21 +78,18 @@ async def check_contract(pdf_bytes: bytes) -> dict:
                 "summary": "Upload a text-based PDF for analysis."
             }
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            system=SYSTEM_PROMPT,
+        # The fast, async OpenAI call using guaranteed JSON format
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={ "type": "json_object" },
             messages=[
-                {
-                    "role": "user",
-                    "content": f"Analyze this lease agreement:\n\n{lease_text[:8000]}"
-                }
-            ]
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyze this lease agreement:\n\n{lease_text[:8000]}"}
+            ],
+            temperature=0.1
         )
 
-        raw = message.content[0].text.strip()
-
-        import json
+        raw = response.choices[0].message.content
         parsed = json.loads(raw)
 
         all_flags = (
@@ -121,10 +123,9 @@ async def check_contract(pdf_bytes: bytes) -> dict:
         return {
             "agent": "contract",
             "status": "UNKNOWN",
-            "findings": ["Failed to parse Claude response as JSON."],
+            "findings": ["Failed to parse OpenAI response as JSON."],
             "summary": "Internal parsing error. Try again."
         }
-
     except Exception as e:
         return {
             "agent": "contract",
