@@ -3,24 +3,22 @@ import axios from "axios"
 
 const API = "http://localhost:8000"
 
+// text color constants - UMich Branding
+const T = { bright: "#ffffff", mid: "#e0e0e0", dim: "#a0a0a0", accent: "#1679B7", danger: "#B91C1C", warning: "#D97706", safe: "#55A05E", maize: "#FFCB05", blue: "#00274C" }
+const F = { display: "'Syne', sans-serif", body: "'DM Sans', sans-serif", mono: "'DM Mono', monospace" }
+
 const scoreColor = (s) => {
-  if (s == null) return "#9999bb"
-  if (s >= 70) return "#00e676"
-  if (s >= 40) return "#ffaa00"
-  return "#ff4757"
+  if (s == null) return "#a0a0a0"
+  if (s >= 70) return "#55A05E"  // Growth Green
+  if (s >= 40) return "#D97706"  // Warning
+  return "#B91C1C"  // Danger Red
 }
 
 const verdictConfig = (v) => ({
-  "Likely Scam":         { label: "⚠ LIKELY SCAM",         bg: "#ff475715", border: "#ff475750", color: "#ff4757" },
-  "Investigate Further": { label: "⚡ INVESTIGATE FURTHER",  bg: "#ffaa0015", border: "#ffaa0050", color: "#ffaa00" },
-  "Appears Legitimate":  { label: "✓ APPEARS LEGITIMATE",   bg: "#00e67615", border: "#00e67650", color: "#00e676" },
-}[v] || { label: "— PENDING", bg: "#ffffff10", border: "#ffffff20", color: "#9999bb" })
-
-// text color constants
-const T = { bright: "#eeeef5", mid: "#bbbbdd", dim: "#9999bb", accent: "#e8ff47", danger: "#ff4757", warning: "#ffaa00", safe: "#00e676" }
-const F = { display: "'Syne', sans-serif", body: "'DM Sans', sans-serif", mono: "'DM Mono', monospace" }
-
-// ── Score Ring ─────────────────────────────────────────────────────────────────
+  "Likely Scam":         { label: "🚨 LIKELY SCAM",         bg: "#B91C1C20", border: "#B91C1C60", color: "#B91C1C" },
+  "Investigate Further": { label: "⚠️ INVESTIGATE FURTHER",  bg: "#D9770620", border: "#D9770660", color: "#D97706" },
+  "Appears Legitimate":  { label: "✅ APPEARS LEGITIMATE",   bg: "#55A05E20", border: "#55A05E60", color: "#55A05E" },
+}[v] || { label: "⏳ PENDING", bg: "#ffffff10", border: "#ffffff20", color: "#a0a0a0" })
 
 function ScoreRing({ score, verdict }) {
   const [display, setDisplay] = useState(0)
@@ -41,30 +39,56 @@ function ScoreRing({ score, verdict }) {
   }, [score])
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
-      <div style={{ position: "relative", width: "200px", height: "200px" }}>
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `radial-gradient(circle, ${color}18 0%, transparent 70%)` }} />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+      <div style={{ position: "relative", width: "220px", height: "220px" }}>
+        {/* Outer glow ring */}
+        <div style={{ position: "absolute", inset: "-10px", borderRadius: "50%", background: `radial-gradient(circle, ${color}20 0%, transparent 70%)`, filter: "blur(8px)" }} />
+        
+        {/* Main ring background */}
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `conic-gradient(from 0deg, ${color}30 0deg, ${color}10 180deg, transparent 360deg)`, opacity: 0.3 }} />
+        
+        {/* Inner background */}
+        <div style={{ position: "absolute", inset: "15px", borderRadius: "50%", background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", border: "2px solid #2a2a4e" }} />
+        
         <svg style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }} viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="54" fill="none" stroke="#1c1c2e" strokeWidth="6" />
+          <circle cx="60" cy="60" r="54" fill="none" stroke="#2a2a4e" strokeWidth="8" />
           {score != null && (
-            <circle cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="6"
+            <circle cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="8"
               strokeLinecap="round" strokeDasharray={circumference}
-              style={{ strokeDashoffset: offset, transition: "stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1)", filter: `drop-shadow(0 0 8px ${color})` }} />
+              style={{ strokeDashoffset: offset, transition: "stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1)", filter: `drop-shadow(0 0 12px ${color}60)` }} />
           )}
         </svg>
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+        
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
           {score != null ? (
             <>
-              <span style={{ fontFamily: F.display, fontWeight: 800, fontSize: "52px", lineHeight: 1, color, textShadow: `0 0 24px ${color}70` }}>{display}</span>
-              <span style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, letterSpacing: "0.2em" }}>TRUST SCORE</span>
+              <span style={{ fontFamily: F.display, fontWeight: 900, fontSize: "56px", lineHeight: 1, color, textShadow: `0 0 30px ${color}80, 0 0 60px ${color}40` }}>{display}</span>
+              <span style={{ fontFamily: F.mono, fontSize: "12px", color: T.dim, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 500 }}>Trust Score</span>
             </>
           ) : (
-            <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.dim, letterSpacing: "0.15em" }}>AWAITING</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", border: "3px solid #2a2a4e", borderTopColor: T.accent, animation: "spin 1s linear infinite" }} />
+              <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.dim, letterSpacing: "0.15em", textTransform: "uppercase" }}>Analyzing</span>
+            </div>
           )}
         </div>
       </div>
+      
       {verdict && (
-        <div style={{ padding: "8px 20px", borderRadius: "100px", border: `1px solid ${vc.border}`, background: vc.bg, color: vc.color, fontFamily: F.display, fontWeight: 700, fontSize: "13px", letterSpacing: "0.08em" }}>
+        <div style={{ 
+          padding: "10px 24px", 
+          borderRadius: "25px", 
+          border: `2px solid ${vc.border}`, 
+          background: `linear-gradient(135deg, ${vc.bg} 0%, ${vc.bg}80 100%)`, 
+          color: vc.color, 
+          fontFamily: F.display, 
+          fontWeight: 800, 
+          fontSize: "14px", 
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          boxShadow: `0 4px 20px ${vc.color}20`,
+          backdropFilter: "blur(10px)"
+        }}>
           {vc.label}
         </div>
       )}
@@ -77,32 +101,85 @@ function ScoreRing({ score, verdict }) {
 function AgentCard({ icon, title, score, summary, findings, delay = 0 }) {
   const color = scoreColor(score)
   return (
-    <div style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", animation: `fadeUp 0.5s ease-out ${delay}s forwards`, opacity: 0 }}>
+    <div style={{ 
+      background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", 
+      border: "1px solid #2a2a4e", 
+      borderRadius: "16px", 
+      padding: "18px", 
+      display: "flex", 
+      flexDirection: "column", 
+      gap: "12px", 
+      animation: `fadeUp 0.6s ease-out ${delay}s forwards`, 
+      opacity: 0,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+      backdropFilter: "blur(10px)",
+      transition: "transform 0.2s ease, box-shadow 0.2s ease",
+      cursor: "pointer"
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.transform = "translateY(-2px)"
+      e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.4)"
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.transform = "translateY(0)"
+      e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.3)"
+    }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "#12121e", border: "1px solid #1c1c2e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>{icon}</div>
-          <span style={{ fontFamily: F.display, fontWeight: 700, fontSize: "13px", color: T.bright }}>{title}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ 
+            width: "36px", 
+            height: "36px", 
+            borderRadius: "10px", 
+            background: `linear-gradient(135deg, ${color}20 0%, ${color}10 100%)`, 
+            border: `1px solid ${color}30`, 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            fontSize: "16px",
+            boxShadow: `0 0 20px ${color}20`
+          }}>
+            {icon}
+          </div>
+          <span style={{ fontFamily: F.display, fontWeight: 700, fontSize: "14px", color: T.bright }}>{title}</span>
         </div>
         {score != null
-          ? <span style={{ fontFamily: F.mono, fontSize: "14px", fontWeight: 500, color }}>{score}</span>
-          : <span style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, background: "#12121e", padding: "2px 8px", borderRadius: "5px" }}>SKIPPED</span>
+          ? <span style={{ fontFamily: F.mono, fontSize: "16px", fontWeight: 600, color, textShadow: `0 0 10px ${color}50` }}>{score}</span>
+          : <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.dim, background: "#0f0f23", padding: "3px 10px", borderRadius: "6px", border: "1px solid #2a2a4e" }}>SKIPPED</span>
         }
       </div>
+      
       {score != null && (
-        <div style={{ height: "3px", background: "#1c1c2e", borderRadius: "100px", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${score}%`, background: color, borderRadius: "100px", boxShadow: `0 0 6px ${color}80`, transition: "width 1s ease-out 0.3s" }} />
+        <div style={{ height: "4px", background: "#0f0f23", borderRadius: "100px", overflow: "hidden", border: "1px solid #2a2a4e" }}>
+          <div style={{ 
+            height: "100%", 
+            width: `${score}%`, 
+            background: `linear-gradient(90deg, ${color} 0%, ${color}80 100%)`, 
+            borderRadius: "100px", 
+            boxShadow: `0 0 10px ${color}60`, 
+            transition: "width 1.2s ease-out 0.3s",
+            position: "relative"
+          }}>
+            <div style={{ 
+              position: "absolute", 
+              inset: 0, 
+              background: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)`, 
+              animation: "shimmer 2s infinite" 
+            }} />
+          </div>
         </div>
       )}
-      {summary && <p style={{ fontFamily: F.body, fontSize: "12px", color: T.mid, lineHeight: "1.6", margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{summary}</p>}
+      
+      {summary && <p style={{ fontFamily: F.body, fontSize: "13px", color: T.mid, lineHeight: "1.6", margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{summary}</p>}
+      
       {findings?.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "5px", paddingTop: "8px", borderTop: "1px solid #1c1c2e" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "10px", borderTop: "1px solid #2a2a4e" }}>
           {findings.slice(0, 2).map((f, i) => (
-            <div key={i} style={{ display: "flex", gap: "6px" }}>
-              <span style={{ color: T.danger, fontSize: "10px", marginTop: "2px", flexShrink: 0 }}>▸</span>
-              <span style={{ fontFamily: F.body, fontSize: "11px", color: T.mid, lineHeight: "1.5", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{f}</span>
+            <div key={i} style={{ display: "flex", gap: "8px" }}>
+              <span style={{ color: T.danger, fontSize: "12px", marginTop: "1px", flexShrink: 0 }}>▸</span>
+              <span style={{ fontFamily: F.body, fontSize: "12px", color: T.mid, lineHeight: "1.5", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{f}</span>
             </div>
           ))}
-          {findings.length > 2 && <span style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim }}>+{findings.length - 2} more</span>}
+          {findings.length > 2 && <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.dim, fontStyle: "italic" }}>+{findings.length - 2} more findings</span>}
         </div>
       )}
     </div>
@@ -139,9 +216,10 @@ function LoadingScreen({ photoCount }) {
             <div style={{
               width: "24px", height: "24px", borderRadius: "50%", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px",
-              background: i < step ? "#00e67615" : i === step ? "#e8ff4715" : "#12121e",
-              border: `1px solid ${i < step ? "#00e67640" : i === step ? "#e8ff4740" : "#1c1c2e"}`,
+              background: i < step ? `${T.safe}20` : i === step ? `${T.accent}20` : "#1a1a2e",
+              border: `1px solid ${i < step ? T.safe + "40" : i === step ? T.accent + "40" : "#2a2a4e"}`,
               color: i < step ? T.safe : i === step ? T.accent : T.dim,
+              boxShadow: i < step ? `0 0 15px ${T.safe}30` : i === step ? `0 0 15px ${T.accent}30` : "none"
             }}>
               {i < step ? "✓" : s.icon}
             </div>
@@ -166,173 +244,452 @@ function EmptyState() {
     { icon: "🔎", label: "Image Forensics", desc: "Stolen photo detection" },
   ]
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px", gap: "28px", textAlign: "center" }} className="fade-up">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px", gap: "32px", textAlign: "center" }} className="fade-up">
       <div>
-        <div style={{ width: "56px", height: "56px", borderRadius: "16px", background: "#0e0e1a", border: "1px solid #1c1c2e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", margin: "0 auto 14px" }}>🏠</div>
-        <h2 style={{ fontFamily: F.display, fontWeight: 700, fontSize: "20px", color: T.bright, margin: "0 0 8px" }}>Ready to Investigate</h2>
-        <p style={{ fontFamily: F.body, fontSize: "14px", color: T.mid, lineHeight: "1.7", maxWidth: "340px", margin: "0 auto" }}>
+        <div style={{ 
+          width: "64px", 
+          height: "64px", 
+          borderRadius: "20px", 
+          background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", 
+          border: "1px solid #2a2a4e", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center", 
+          fontSize: "28px", 
+          margin: "0 auto 16px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+          backdropFilter: "blur(10px)"
+        }}>
+          🏠
+        </div>
+        <h2 style={{ fontFamily: F.display, fontWeight: 700, fontSize: "22px", color: T.bright, margin: "0 0 10px" }}>Ready to Investigate</h2>
+        <p style={{ fontFamily: F.body, fontSize: "15px", color: T.mid, lineHeight: "1.7", maxWidth: "360px", margin: "0 auto" }}>
           Paste any rental listing and our AI agents will verify it across 4 dimensions simultaneously in under 30 seconds.
         </p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", width: "100%", maxWidth: "400px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", width: "100%", maxWidth: "420px" }}>
         {agents.map((a, i) => (
-          <div key={i} style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "14px", padding: "14px", textAlign: "left", animation: `fadeUp 0.4s ease-out ${0.1 + i * 0.1}s forwards`, opacity: 0 }}>
-            <div style={{ fontSize: "20px", marginBottom: "6px" }}>{a.icon}</div>
-            <div style={{ fontFamily: F.display, fontWeight: 700, fontSize: "13px", color: T.bright, marginBottom: "3px" }}>{a.label}</div>
-            <div style={{ fontFamily: F.mono, fontSize: "11px", color: T.mid, lineHeight: "1.5" }}>{a.desc}</div>
+          <div key={i} style={{ 
+            background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", 
+            border: "1px solid #2a2a4e", 
+            borderRadius: "16px", 
+            padding: "16px", 
+            textAlign: "left", 
+            animation: `fadeUp 0.5s ease-out ${0.1 + i * 0.1}s forwards`, 
+            opacity: 0,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+            backdropFilter: "blur(10px)",
+            transition: "transform 0.2s ease",
+            cursor: "pointer"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"}
+          onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
+          >
+            <div style={{ fontSize: "22px", marginBottom: "8px" }}>{a.icon}</div>
+            <div style={{ fontFamily: F.display, fontWeight: 700, fontSize: "14px", color: T.bright, marginBottom: "4px" }}>{a.label}</div>
+            <div style={{ fontFamily: F.mono, fontSize: "12px", color: T.mid, lineHeight: "1.5" }}>{a.desc}</div>
           </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: "20px", fontFamily: F.mono, fontSize: "11px", color: T.dim }}>
+      <div style={{ display: "flex", gap: "24px", fontFamily: F.mono, fontSize: "12px", color: T.dim }}>
         <span>🔒 No data stored</span><span>⚡ ~30s analysis</span><span>🤖 4 AI agents</span>
       </div>
     </div>
   )
 }
 
-// ── Results Dashboard ──────────────────────────────────────────────────────────
+// ── Analysis Dashboard ──────────────────────────────────────────────────────────
 
-function ResultsDashboard({ result, imageUrls }) {
+function AnalysisDashboard({ result, imageUrls }) {
   const { trust_score, verdict, red_flags, audit_log, evidence_summary, agent_scores, action_kit, parsed_listing, listing_flags } = result
+  const [copySuccess, setCopySuccess] = useState(false)
+  const [agentLogs, setAgentLogs] = useState({
+    contract: ["Analyzing lease contract..."],
+    property: ["Fetching market data..."],
+    street_view: ["Comparing with Street View..."],
+    reverse_image: ["Scanning for stolen photos..."]
+  })
+
   const label = (text) => (
-    <p style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "10px", marginTop: 0 }}>{text}</p>
+    <p style={{ fontFamily: F.mono, fontSize: "12px", color: T.dim, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "16px", marginTop: 0 }}>{text}</p>
   )
 
+  const handleCopy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy text: ', err)
+    }
+  }
+
+  const downloadReport = () => {
+    // Simple PDF generation - in a real app, you'd use a proper PDF library
+    const reportContent = `
+SUBLETSHIELD INVESTIGATION REPORT
+================================
+
+TRUST SCORE: ${trust_score}/100
+VERDICT: ${verdict}
+
+LISTING DETAILS:
+- Address: ${parsed_listing?.full_address || 'N/A'}
+- Rent: $${parsed_listing?.asking_rent || 'N/A'}
+- Landlord: ${parsed_listing?.landlord_name || 'N/A'}
+
+RED FLAGS FOUND:
+${red_flags?.map(flag => `- ${flag}`).join('\n') || 'None'}
+
+AGENT ANALYSIS:
+Contract: ${agent_scores?.contract}/100
+Market: ${agent_scores?.property}/100
+Street View: ${agent_scores?.street_view}/100
+Reverse Image: ${agent_scores?.reverse_image}/100
+
+ACTION KIT:
+${action_kit?.steps?.map((step, i) => `${i+1}. ${step}`).join('\n') || ''}
+
+COPY-PASTE REPLY:
+"${action_kit?.copy_paste_reply || ''}"
+
+Generated by SubletShield - AI Fraud Detection for Student Rentals
+    `
+    
+    const blob = new Blob([reportContent], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'subletshield-report.txt'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
 
-      {/* Score */}
-      <div style={{ background: "#12121e", border: "1px solid #1c1c2e", borderRadius: "20px", padding: "28px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", position: "relative", overflow: "hidden" }} className="fade-up">
-        <div className="bg-grid" style={{ position: "absolute", inset: 0, opacity: 0.25 }} />
-        <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%" }}>
-          <ScoreRing score={trust_score} verdict={verdict} />
-          {parsed_listing?.full_address && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "100px", padding: "5px 14px" }}>
-              <span style={{ fontSize: "11px" }}>📍</span>
-              <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.mid }}>{parsed_listing.full_address}</span>
-            </div>
-          )}
-          {agent_scores && (
-            <div style={{ display: "flex", gap: "3px", height: "4px", borderRadius: "100px", overflow: "hidden", width: "100%", maxWidth: "260px" }}>
-              {Object.entries(agent_scores).map(([k, v]) => (
-                <div key={k} style={{ flex: 1, background: scoreColor(v), borderRadius: "100px" }} title={`${k}: ${v}`} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Left Column */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
-      {/* Agent cards */}
-      <div>
-        {label("Agent Analysis")}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-          <AgentCard icon="📄" title="Contract" score={agent_scores?.contract} findings={audit_log?.contract_compliance?.illegal_clauses} summary={evidence_summary?.[0]} delay={0.1} />
-          <AgentCard icon="📊" title="Market Data" score={agent_scores?.property}
-            findings={audit_log?.property_analysis?.price_discrepancy_flag ? [`Asking $${audit_log.property_analysis.asking_rent} vs avg $${audit_log.property_analysis.market_average}`] : []}
-            summary={evidence_summary?.[1]} delay={0.2} />
-          <AgentCard icon="🏠" title="Street View" score={agent_scores?.street_view} findings={audit_log?.visual_verification?.mismatching_features || []} summary={evidence_summary?.[2]} delay={0.3} />
-          <AgentCard icon="🔎" title="Reverse Image" score={agent_scores?.reverse_image}
-            findings={audit_log?.visual_verification?.reverse_image_mismatches || []}
-            summary={audit_log?.visual_verification?.photos_checked > 0
-              ? `${audit_log.visual_verification.stolen_count}/${audit_log.visual_verification.photos_checked} photos flagged`
-              : evidence_summary?.[3]}
-            delay={0.4} />
-        </div>
-      </div>
-
-      {/* Photo strip + street view comparison */}
-      {imageUrls?.length > 0 && (
-        <div className="fade-up-4">
-          {label("Visual Verification")}
-          <div style={{ background: "#12121e", border: "1px solid #1c1c2e", borderRadius: "16px", overflow: "hidden" }}>
-            {/* Photo strip */}
-            <div style={{ display: "flex", gap: "6px", padding: "12px", overflowX: "auto" }}>
-              {imageUrls.map((url, i) => (
-                <div key={i} style={{ position: "relative", flexShrink: 0 }}>
-                  <img src={url} alt={`Photo ${i + 1}`} style={{ height: "90px", width: "120px", objectFit: "cover", borderRadius: "8px", border: "1px solid #1c1c2e" }} />
-                  {i === 0 && (
-                    <span style={{ position: "absolute", bottom: "4px", left: "4px", background: "#000000aa", fontFamily: F.mono, fontSize: "9px", color: T.accent, padding: "2px 5px", borderRadius: "4px" }}>
-                      STREET VIEW ↑
-                    </span>
-                  )}
+        {/* Interactive Spatial Context - Split Screen */}
+        {imageUrls?.length > 0 && (
+          <div style={{
+            background: "rgba(10, 10, 20, 0.95)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(42, 42, 78, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+          }}>
+            {label("Spatial Analysis - Street View Comparison")}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "center" }}>
+              <div>
+                <div style={{ fontFamily: F.mono, fontSize: "11px", color: T.accent, marginBottom: "8px" }}>UPLOADED PHOTO</div>
+                <img src={imageUrls[0]} alt="Uploaded" style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "8px", border: "2px solid rgba(22, 121, 183, 0.3)" }} />
+              </div>
+              <div>
+                <div style={{ fontFamily: F.mono, fontSize: "11px", color: T.safe, marginBottom: "8px" }}>STREET VIEW</div>
+                <div style={{
+                  width: "100%",
+                  height: "120px",
+                  background: "linear-gradient(45deg, #1a1a2e 25%, transparent 25%), linear-gradient(-45deg, #1a1a2e 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1a1a2e 75%), linear-gradient(-45deg, transparent 75%, #1a1a2e 75%)",
+                  backgroundSize: "20px 20px",
+                  backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
+                  borderRadius: "8px",
+                  border: "2px solid rgba(85, 160, 94, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: T.safe,
+                  fontSize: "12px",
+                  fontFamily: F.mono
+                }}>
+                  Street View Data
                 </div>
-              ))}
+              </div>
             </div>
-            {/* Street view result */}
-            <div style={{ padding: "10px 14px", borderTop: "1px solid #1c1c2e", background: audit_log?.visual_verification?.street_view_match ? "#00e67608" : "#ff475708", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ color: audit_log?.visual_verification?.street_view_match ? T.safe : T.danger, fontSize: "14px" }}>
-                {audit_log?.visual_verification?.street_view_match ? "✓" : "✗"}
-              </span>
-              <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.mid, flex: 1 }}>
-                {audit_log?.visual_verification?.street_view_match ? "First photo matches Street View" : "First photo doesn't match Street View"}
-              </span>
-              <span style={{ fontFamily: F.mono, fontSize: "12px", color: scoreColor(audit_log?.visual_verification?.street_view_score) }}>
-                {audit_log?.visual_verification?.street_view_score ?? "—"}/100
-              </span>
+            <div style={{
+              marginTop: "12px",
+              padding: "8px 12px",
+              background: audit_log?.visual_verification?.street_view_match ? "rgba(85, 160, 94, 0.1)" : "rgba(185, 28, 28, 0.1)",
+              border: `1px solid ${audit_log?.visual_verification?.street_view_match ? "rgba(85, 160, 94, 0.3)" : "rgba(185, 28, 28, 0.3)"}`,
+              borderRadius: "6px",
+              fontSize: "12px",
+              color: T.mid
+            }}>
+              {audit_log?.visual_verification?.street_view_match ? "✓ Visual features match Street View" : "✗ Visual features don't match Street View"}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Listing language flags */}
-      {listing_flags?.length > 0 && (
-        <div className="fade-up-3">
-          {label("Suspicious Listing Language")}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-            {listing_flags.map((f, i) => (
-              <span key={i} style={{ background: "#ffaa0012", border: "1px solid #ffaa0040", color: T.warning, fontFamily: F.mono, fontSize: "11px", padding: "5px 11px", borderRadius: "100px" }}>⚠ {f}</span>
-            ))}
+        {/* Linguistic Heat Map */}
+        {parsed_listing?.full_text && (
+          <div style={{
+            background: "rgba(10, 10, 20, 0.95)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(42, 42, 78, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+          }}>
+            {label("Contract Analysis - Linguistic Heat Map")}
+            <div style={{
+              maxHeight: "200px",
+              overflowY: "auto",
+              fontFamily: F.body,
+              fontSize: "13px",
+              lineHeight: "1.6",
+              color: T.mid,
+              background: "rgba(15, 15, 25, 0.5)",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid rgba(42, 42, 78, 0.2)"
+            }}>
+              {parsed_listing.full_text.split(' ').map((word, i) => {
+                const isIllegal = audit_log?.contract_compliance?.illegal_clauses?.some(clause => 
+                  clause.toLowerCase().includes(word.toLowerCase())
+                )
+                const isRedFlag = listing_flags?.some(flag => 
+                  flag.toLowerCase().includes(word.toLowerCase())
+                )
+                
+                return (
+                  <span key={i} style={{
+                    backgroundColor: isIllegal ? 'rgba(185, 28, 28, 0.3)' : isRedFlag ? 'rgba(217, 119, 6, 0.3)' : 'transparent',
+                    padding: '2px 4px',
+                    borderRadius: '3px',
+                    margin: '0 1px'
+                  }}>
+                    {word}{' '}
+                  </span>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Red flags */}
-      {red_flags?.length > 0 && (
-        <div className="fade-up-4">
-          {label(`Red Flags (${red_flags.length})`)}
-          <div style={{ background: "#12121e", border: "1px solid #ff475725", borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "9px" }}>
-            {red_flags.map((f, i) => (
-              <div key={i} style={{ display: "flex", gap: "8px" }}>
-                <span style={{ color: T.danger, fontSize: "11px", marginTop: "2px", flexShrink: 0 }}>⚠</span>
-                <span style={{ fontFamily: F.body, fontSize: "13px", color: T.bright, lineHeight: "1.5" }}>{f}</span>
+        {/* Agent Thought Logs */}
+        <div style={{
+          background: "rgba(10, 10, 20, 0.95)",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(42, 42, 78, 0.3)",
+          borderRadius: "16px",
+          padding: "20px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+        }}>
+          {label("Agent Activity Logs")}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            {Object.entries(agentLogs).map(([agent, logs]) => (
+              <div key={agent} style={{
+                background: "rgba(15, 15, 25, 0.5)",
+                border: "1px solid rgba(42, 42, 78, 0.2)",
+                borderRadius: "8px",
+                padding: "12px"
+              }}>
+                <div style={{ fontFamily: F.mono, fontSize: "10px", color: T.accent, marginBottom: "8px", textTransform: "uppercase" }}>
+                  {agent.replace('_', ' ')} agent
+                </div>
+                <div style={{ fontFamily: F.mono, fontSize: "11px", color: T.mid, lineHeight: "1.4" }}>
+                  {logs[logs.length - 1]}
+                </div>
               </div>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Action kit */}
-      {action_kit && (
-        <div className="fade-up-5">
-          {label("Action Kit")}
-          <div style={{ background: "#ff475708", border: "1px solid #ff475730", borderRadius: "16px", padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
+      </div>
+
+      {/* Right Column */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+        {/* Market Pressure Gauge */}
+        {audit_log?.property_analysis && (
+          <div style={{
+            background: "rgba(10, 10, 20, 0.95)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(42, 42, 78, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+          }}>
+            {label("Market Pressure Analysis")}
+            <div style={{ textAlign: "center", marginBottom: "16px" }}>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: T.bright, marginBottom: "4px" }}>
+                ${audit_log.property_analysis.asking_rent}
+              </div>
+              <div style={{ fontFamily: F.mono, fontSize: "12px", color: T.mid }}>Asking Rent</div>
+            </div>
+            
+            {/* Simple histogram visualization */}
+            <div style={{ display: "flex", alignItems: "end", justifyContent: "center", gap: "4px", height: "80px", marginBottom: "12px" }}>
+              {[0.3, 0.5, 0.8, 0.6, 0.4, 0.2, 0.1].map((height, i) => (
+                <div key={i} style={{
+                  width: "20px",
+                  height: `${height * 100}%`,
+                  background: i === 3 ? scoreColor(agent_scores?.property) : "rgba(42, 42, 78, 0.5)",
+                  borderRadius: "2px 2px 0 0",
+                  position: "relative"
+                }}>
+                  {i === 3 && (
+                    <div style={{
+                      position: "absolute",
+                      top: "-20px",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      fontSize: "10px",
+                      color: T.accent,
+                      fontFamily: F.mono
+                    }}>
+                      YOUR LISTING
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: F.mono, fontSize: "12px", color: T.mid, marginBottom: "4px" }}>
+                Market Average: ${audit_log.property_analysis.market_average}
+              </div>
+              <div style={{
+                fontFamily: F.mono,
+                fontSize: "11px",
+                color: agent_scores?.property < 50 ? T.danger : T.safe
+              }}>
+                {agent_scores?.property < 50 ? "⚠️ Above market rate" : "✅ Fair market value"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Kit */}
+        {action_kit && (
+          <div style={{
+            background: "rgba(10, 10, 20, 0.95)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(42, 42, 78, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+          }}>
+            {label("Defense Action Plan")}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {action_kit.steps.map((s, i) => (
-                <div key={i} style={{ display: "flex", gap: "10px" }}>
-                  <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.danger, background: "#ff475715", border: "1px solid #ff475730", borderRadius: "5px", padding: "2px 6px", flexShrink: 0 }}>0{i + 1}</span>
+                <div key={i} style={{ display: "flex", gap: "12px" }}>
+                  <span style={{
+                    fontFamily: F.mono,
+                    fontSize: "12px",
+                    color: T.danger,
+                    background: "rgba(185, 28, 28, 0.2)",
+                    border: "1px solid rgba(185, 28, 28, 0.3)",
+                    borderRadius: "6px",
+                    padding: "4px 8px",
+                    flexShrink: 0
+                  }}>
+                    {i + 1}
+                  </span>
                   <span style={{ fontFamily: F.body, fontSize: "13px", color: T.bright, lineHeight: "1.5" }}>{s}</span>
                 </div>
               ))}
             </div>
-            <div style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "10px", padding: "12px" }}>
-              <p style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, marginBottom: "7px", letterSpacing: "0.1em" }}>COPY-PASTE REPLY TO LANDLORD</p>
-              <p style={{ fontFamily: F.body, fontSize: "12px", color: T.mid, lineHeight: "1.6", fontStyle: "italic", margin: "0 0 8px" }}>"{action_kit.copy_paste_reply}"</p>
-              <button onClick={() => navigator.clipboard.writeText(action_kit.copy_paste_reply)}
-                style={{ fontFamily: F.mono, fontSize: "11px", color: T.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                Copy to clipboard →
+            
+            <div style={{
+              marginTop: "16px",
+              padding: "12px",
+              background: "rgba(15, 15, 25, 0.5)",
+              border: "1px solid rgba(42, 42, 78, 0.2)",
+              borderRadius: "8px"
+            }}>
+              <div style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, marginBottom: "8px", letterSpacing: "0.1em" }}>
+                COPY-PASTE REPLY TO LANDLORD
+              </div>
+              <div style={{ fontFamily: F.body, fontSize: "12px", color: T.mid, lineHeight: "1.6", fontStyle: "italic", marginBottom: "8px" }}>
+                "{action_kit.copy_paste_reply}"
+              </div>
+              <button onClick={() => handleCopy(action_kit.copy_paste_reply)}
+                style={{
+                  fontFamily: F.mono,
+                  fontSize: "11px",
+                  color: copySuccess ? T.safe : T.accent,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  transition: "color 0.2s"
+                }}>
+                {copySuccess ? "✓ Copied!" : "📋 Copy to clipboard"}
               </button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${Object.keys(action_kit.reporting_links).length}, 1fr)`, gap: "7px" }}>
+            
+            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+              <button onClick={downloadReport} style={{
+                flex: 1,
+                padding: "10px",
+                background: "linear-gradient(135deg, #1679B7 0%, #0F4C75 100%)",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontFamily: F.display,
+                fontWeight: "700",
+                fontSize: "12px",
+                cursor: "pointer",
+                transition: "transform 0.2s"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-1px)"}
+              onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}>
+                📄 Download Report
+              </button>
+              
               {Object.entries(action_kit.reporting_links).map(([label, url]) => (
                 <a key={label} href={url} target="_blank" rel="noopener noreferrer"
-                  style={{ textAlign: "center", background: "#ff475712", border: "1px solid #ff475730", color: T.danger, fontFamily: F.display, fontWeight: 700, fontSize: "11px", padding: "9px", borderRadius: "9px", textDecoration: "none" }}>
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    background: "rgba(185, 28, 28, 0.2)",
+                    border: "1px solid rgba(185, 28, 28, 0.3)",
+                    color: T.danger,
+                    fontFamily: F.display,
+                    fontWeight: 700,
+                    fontSize: "11px",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    textDecoration: "none",
+                    transition: "background 0.2s"
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(185, 28, 28, 0.3)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(185, 28, 28, 0.2)"}>
                   {label} →
                 </a>
               ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Red Flags */}
+        {red_flags?.length > 0 && (
+          <div style={{
+            background: "rgba(10, 10, 20, 0.95)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(185, 28, 28, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 8px 32px rgba(185, 28, 28, 0.2)"
+          }}>
+            {label(`Critical Red Flags (${red_flags.length})`)}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {red_flags.map((f, i) => (
+                <div key={i} style={{ display: "flex", gap: "10px" }}>
+                  <span style={{ color: T.danger, fontSize: "14px", marginTop: "1px", flexShrink: 0 }}>🚨</span>
+                  <span style={{ fontFamily: F.body, fontSize: "13px", color: T.bright, lineHeight: "1.5" }}>{f}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }
@@ -388,9 +745,18 @@ function InputPanel({ onResult, onLoading, loading }) {
   }
 
   const inputStyle = {
-    background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "10px",
-    padding: "11px 14px", fontSize: "14px", color: T.bright,
-    fontFamily: F.body, width: "100%", outline: "none", transition: "border-color 0.2s",
+    background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", 
+    border: "1px solid #2a2a4e", 
+    borderRadius: "12px",
+    padding: "14px 16px", 
+    fontSize: "14px", 
+    color: T.bright,
+    fontFamily: F.body, 
+    width: "100%", 
+    outline: "none", 
+    transition: "all 0.3s ease",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+    backdropFilter: "blur(10px)"
   }
 
   return (
@@ -399,7 +765,7 @@ function InputPanel({ onResult, onLoading, loading }) {
       {/* Logo */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "5px" }}>
-          <div style={{ width: "34px", height: "34px", borderRadius: "9px", background: "#e8ff4715", border: "1px solid #e8ff4730", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "15px" }}>🔍</div>
+        <div style={{ width: "40px", height: "40px", borderRadius: "12px", background: `linear-gradient(135deg, ${T.accent}20 0%, ${T.accent}10 100%)`, border: `1px solid ${T.accent}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", boxShadow: `0 0 20px ${T.accent}20` }}>🔍</div>
           <h1 style={{ fontFamily: F.display, fontWeight: 800, fontSize: "21px", color: T.bright, margin: 0 }}>SubletShield</h1>
         </div>
         <p style={{ fontFamily: F.body, fontSize: "13px", color: T.mid, margin: 0, lineHeight: "1.6" }}>AI fraud detection for student rentals. Paste any listing to investigate.</p>
@@ -413,8 +779,14 @@ function InputPanel({ onResult, onLoading, loading }) {
         <textarea value={listingText} onChange={e => setListingText(e.target.value)}
           placeholder={"URGENT!! Rent: $900/month\n2 Beds, 1 Bath — 123 Main St\n\nPaste the full listing here..."}
           rows={6} style={{ ...inputStyle, resize: "none", lineHeight: "1.6" }}
-          onFocus={e => e.target.style.borderColor = "#e8ff4750"}
-          onBlur={e => e.target.style.borderColor = "#1c1c2e"} />
+          onFocus={e => {
+            e.target.style.borderColor = "#00d4ff50"
+            e.target.style.boxShadow = "0 0 20px rgba(0,212,255,0.2), 0 2px 10px rgba(0,0,0,0.2)"
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = "#2a2a4e"
+            e.target.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)"
+          }} />
       </div>
 
       {/* Parse preview */}
@@ -425,11 +797,11 @@ function InputPanel({ onResult, onLoading, loading }) {
             <span style={{ fontFamily: F.mono, fontSize: "11px", color: T.accent }}>Listing parsed</span>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-            {parsedPreview.full_address && <span style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "7px", padding: "3px 9px", fontSize: "11px", color: T.mid }}>📍 {parsedPreview.full_address}</span>}
-            {parsedPreview.asking_rent && <span style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "7px", padding: "3px 9px", fontSize: "11px", color: T.mid }}>💰 ${parsedPreview.asking_rent}/mo</span>}
-            {parsedPreview.landlord_name && <span style={{ background: "#0e0e1a", border: "1px solid #1c1c2e", borderRadius: "7px", padding: "3px 9px", fontSize: "11px", color: T.mid }}>👤 {parsedPreview.landlord_name}</span>}
+            {parsedPreview.full_address && <span style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", border: "1px solid #2a2a4e", borderRadius: "8px", padding: "4px 10px", fontSize: "11px", color: T.mid, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>📍 {parsedPreview.full_address}</span>}
+            {parsedPreview.asking_rent && <span style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", border: "1px solid #2a2a4e", borderRadius: "8px", padding: "4px 10px", fontSize: "11px", color: T.mid, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>💰 ${parsedPreview.asking_rent}/mo</span>}
+            {parsedPreview.landlord_name && <span style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", border: "1px solid #2a2a4e", borderRadius: "8px", padding: "4px 10px", fontSize: "11px", color: T.mid, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>👤 {parsedPreview.landlord_name}</span>}
             {parsedPreview.listing_flags?.map((f, i) => (
-              <span key={i} style={{ background: "#ffaa0012", border: "1px solid #ffaa0030", borderRadius: "7px", padding: "3px 9px", fontSize: "11px", color: T.warning }}>⚠ {f}</span>
+              <span key={i} style={{ background: `linear-gradient(135deg, ${T.warning}15 0%, ${T.warning}08 100%)`, border: `1px solid ${T.warning}30`, borderRadius: "8px", padding: "4px 10px", fontSize: "11px", color: T.warning, boxShadow: `0 2px 8px ${T.warning}15` }}>⚠ {f}</span>
             ))}
           </div>
           {parsedPreview.missing_fields?.length > 0 && (
@@ -443,8 +815,14 @@ function InputPanel({ onResult, onLoading, loading }) {
         <label style={{ fontFamily: F.mono, fontSize: "10px", color: T.dim, letterSpacing: "0.15em", textTransform: "uppercase" }}>Your Campus / Office Address</label>
         <input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)}
           placeholder="500 S State St, Ann Arbor, MI 48109" style={inputStyle}
-          onFocus={e => e.target.style.borderColor = "#e8ff4750"}
-          onBlur={e => e.target.style.borderColor = "#1c1c2e"} />
+          onFocus={e => {
+            e.target.style.borderColor = "#00d4ff50"
+            e.target.style.boxShadow = "0 0 20px rgba(0,212,255,0.2), 0 2px 10px rgba(0,0,0,0.2)"
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = "#2a2a4e"
+            e.target.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)"
+          }} />
       </div>
 
       {/* Multi-image upload */}
@@ -505,17 +883,35 @@ function InputPanel({ onResult, onLoading, loading }) {
       {/* Submit */}
       <button onClick={handleSubmit} disabled={loading || !listingText || !officeAddress}
         style={{
-          width: "100%", padding: "13px", borderRadius: "10px", border: "none",
+          width: "100%", padding: "16px", borderRadius: "12px", border: "none",
           cursor: loading || !listingText || !officeAddress ? "not-allowed" : "pointer",
-          background: loading || !listingText || !officeAddress ? "#1c1c2e" : "#e8ff47",
-          color: loading || !listingText || !officeAddress ? T.dim : "#07070f",
-          fontFamily: F.display, fontWeight: 800, fontSize: "13px", letterSpacing: "0.08em", textTransform: "uppercase",
-          transition: "all 0.2s", boxShadow: loading || !listingText || !officeAddress ? "none" : "0 4px 20px rgba(232,255,71,0.2)",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: "7px"
+          background: loading || !listingText || !officeAddress 
+            ? "linear-gradient(135deg, #2a2a4e 0%, #1a1a2e 100%)" 
+            : "linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)",
+          color: loading || !listingText || !officeAddress ? T.dim : "#ffffff",
+          fontFamily: F.display, fontWeight: 900, fontSize: "14px", letterSpacing: "0.08em", textTransform: "uppercase",
+          transition: "all 0.3s ease", 
+          boxShadow: loading || !listingText || !officeAddress 
+            ? "0 2px 10px rgba(0,0,0,0.2)" 
+            : "0 8px 30px rgba(0,212,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+          transform: loading || !listingText || !officeAddress ? "none" : "translateY(0px)"
+        }}
+        onMouseEnter={(e) => {
+          if (!(loading || !listingText || !officeAddress)) {
+            e.currentTarget.style.transform = "translateY(-2px)"
+            e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,212,255,0.6), inset 0 1px 0 rgba(255,255,255,0.3)"
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!(loading || !listingText || !officeAddress)) {
+            e.currentTarget.style.transform = "translateY(0px)"
+            e.currentTarget.style.boxShadow = "0 8px 30px rgba(0,212,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2)"
+          }
         }}>
         {loading
-          ? <><span style={{ width: "13px", height: "13px", border: "2px solid #07070f30", borderTopColor: "#07070f", borderRadius: "50%", animation: "spin 1s linear infinite", display: "inline-block" }} />Investigating...</>
-          : `🔍 Investigate${listingImages.length > 0 ? ` · ${listingImages.length} Photo${listingImages.length > 1 ? "s" : ""}` : ""}`
+          ? <><span style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#ffffff", borderRadius: "50%", animation: "spin 1s linear infinite", display: "inline-block" }} />Analyzing...</>
+          : `🚀 Investigate${listingImages.length > 0 ? ` · ${listingImages.length} Photo${listingImages.length > 1 ? "s" : ""}` : ""}`
         }
       </button>
 
@@ -547,32 +943,87 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#07070f" }}>
-      <div className="bg-grid" style={{ position: "fixed", inset: 0, opacity: 0.15, pointerEvents: "none" }} />
-      <div style={{ position: "fixed", top: 0, left: "30%", width: "500px", height: "500px", borderRadius: "50%", background: "radial-gradient(circle, rgba(232,255,71,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
-      <div style={{ position: "fixed", bottom: "20%", right: "20%", width: "400px", height: "400px", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,71,87,0.04) 0%, transparent 70%)", pointerEvents: "none" }} />
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a14 0%, #0f0f1a 50%, #0a0a14 100%)" }}>
+      {/* Animated background elements */}
+      <div className="bg-grid" style={{ position: "fixed", inset: 0, opacity: 0.1, pointerEvents: "none" }} />
+      <div style={{ position: "fixed", top: "-10%", left: "-10%", width: "600px", height: "600px", borderRadius: "50%", background: "radial-gradient(circle, rgba(22, 121, 183, 0.08) 0%, transparent 70%)", pointerEvents: "none", animation: "float 20s ease-in-out infinite" }} />
+      <div style={{ position: "fixed", bottom: "-20%", right: "-20%", width: "500px", height: "500px", borderRadius: "50%", background: "radial-gradient(circle, rgba(85, 160, 94, 0.06) 0%, transparent 70%)", pointerEvents: "none", animation: "float 25s ease-in-out infinite reverse" }} />
+      <div style={{ position: "fixed", top: "50%", left: "70%", width: "300px", height: "300px", borderRadius: "50%", background: "radial-gradient(circle, rgba(255, 203, 5, 0.05) 0%, transparent 70%)", pointerEvents: "none", animation: "float 15s ease-in-out infinite" }} />
 
-      <div style={{ position: "relative", zIndex: 1, maxWidth: "1100px", margin: "0 auto", padding: "28px 20px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: "18px", alignItems: "start" }}>
+      <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", display: "flex" }}>
+        {/* Left Sidebar - Evidence Locker */}
+        <div style={{
+          width: "380px",
+          background: "rgba(10, 10, 20, 0.95)",
+          backdropFilter: "blur(20px)",
+          borderRight: "1px solid rgba(42, 42, 78, 0.3)",
+          padding: "32px 24px",
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          overflowY: "auto",
+          boxShadow: "4px 0 32px rgba(0,0,0,0.3)"
+        }}>
+          <InputPanel onResult={handleResult} onLoading={setLoading} loading={loading} />
+        </div>
 
-          <div style={{ background: "#12121e", border: "1px solid #1c1c2e", borderRadius: "18px", padding: "22px", position: "sticky", top: "28px", boxShadow: "0 4px 32px rgba(0,0,0,0.5)" }}>
-            <InputPanel onResult={handleResult} onLoading={setLoading} loading={loading} />
-          </div>
+        {/* Central Dashboard */}
+        <div style={{ marginLeft: "380px", flex: 1, padding: "32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          {/* Trust Score Header */}
+          {result && (
+            <div style={{
+              background: "rgba(10, 10, 20, 0.95)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(42, 42, 78, 0.3)",
+              borderRadius: "24px",
+              padding: "24px 48px",
+              marginBottom: "32px",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+              textAlign: "center"
+            }}>
+              <div style={{ fontFamily: F.mono, fontSize: "14px", color: T.dim, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "16px" }}>
+                Overall Scam Risk Assessment
+              </div>
+              <div style={{ fontSize: "72px", fontWeight: "900", color: scoreColor(result.trust_score), fontFamily: F.display, marginBottom: "8px" }}>
+                {result.trust_score ?? "--"}
+              </div>
+              <div style={{ fontFamily: F.mono, fontSize: "16px", color: T.mid, letterSpacing: "0.05em" }}>
+                {result.verdict ? verdictConfig(result.verdict).label : "Analysis Pending"}
+              </div>
+            </div>
+          )}
 
-          <div ref={resultsRef}>
+          {/* Main Content Area */}
+          <div ref={resultsRef} style={{ width: "100%", maxWidth: "1200px" }}>
             {loading ? (
-              <div style={{ background: "#12121e", border: "1px solid #1c1c2e", borderRadius: "18px", padding: "24px" }}>
+              <div style={{
+                background: "rgba(10, 10, 20, 0.95)",
+                backdropFilter: "blur(20px)",
+                border: "1px solid rgba(42, 42, 78, 0.3)",
+                borderRadius: "24px",
+                padding: "48px",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+                textAlign: "center"
+              }}>
                 <LoadingScreen photoCount={photoCount} />
               </div>
             ) : result ? (
-              <ResultsDashboard result={result} imageUrls={imageUrls} />
+              <AnalysisDashboard result={result} imageUrls={imageUrls} />
             ) : (
-              <div style={{ background: "#12121e", border: "1px solid #1c1c2e", borderRadius: "18px", padding: "24px" }}>
+              <div style={{
+                background: "rgba(10, 10, 20, 0.95)",
+                backdropFilter: "blur(20px)",
+                border: "1px solid rgba(42, 42, 78, 0.3)",
+                borderRadius: "24px",
+                padding: "48px",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
+                textAlign: "center"
+              }}>
                 <EmptyState />
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>
