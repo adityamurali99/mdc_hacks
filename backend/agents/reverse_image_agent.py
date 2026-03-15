@@ -1,132 +1,120 @@
 import os
+import io
 import httpx
 import base64
-import json
-from openai import AsyncOpenAI
+from PIL import Image
 from serpapi import GoogleSearch
 
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
+IMGBB_API_KEY = os.getenv("IMGBB_API_KEY")
 
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-REAL_ESTATE_DOMAINS = [
-    "zillow.com", "apartments.com", "realtor.com",
-    "redfin.com", "trulia.com", "craigslist.org",
-    "hotpads.com", "rent.com", "zumper.com",
-    "apartmentlist.com", "rentals.com"
-]
-
-
-def encode_image_to_base64(image_bytes: bytes) -> str:
-    return base64.standard_b64encode(image_bytes).decode("utf-8")
-
-
-def reverse_image_search(image_bytes: bytes) -> list[str]:
-    """Layer 1: Reverse image search via SerpAPI."""
-    image_b64 = encode_image_to_base64(image_bytes)
-    image_data_url = f"data:image/jpeg;base64,{image_b64}"
-
-    search = GoogleSearch({
-        "engine": "google_reverse_image",
-        "image_url": image_data_url,
-        "api_key": SERPAPI_API_KEY,
-    })
-
-    data = search.get_dict()
-    urls = []
-
-    for result in data.get("image_results", []):
-        if "link" in result:
-            urls.append(result["link"])
-
-    for result in data.get("inline_images", []):
-        if "link" in result:
-            urls.append(result["link"])
-
-    kg = data.get("knowledge_graph", {})
-    if "url" in kg:
-        urls.append(kg["url"])
-
-    return list(set(urls))
+REAL_ESTATE_DOMAINS = {
+    "zillow.com": "Zillow",
+    "apartments.com": "Apartments.com",
+    "realtor.com": "Realtor.com",
+    "redfin.com": "Redfin",
+    "trulia.com": "Trulia",
+    "craigslist.org": "Craigslist",
+    "hotpads.com": "HotPads",
+    "rent.com": "Rent.com",
+    "zumper.com": "Zumper",
+    "apartmentlist.com": "ApartmentList",
+    "rentals.com": "Rentals.com"
+}
 
 
-def filter_real_estate_urls(urls: list[str]) -> list[str]:
-    return [
-        url for url in urls
-        if any(domain in url for domain in REAL_ESTATE_DOMAINS)
-    ]
+def compress_and_encode(image_bytes: bytes) -> str:
+    """Compress image to under 400KB and return base64."""
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    if max(img.size) > 1024:
+        img.thumbnail((1024, 1024), Image.LANCZOS)
+    for quality in [85, 70, 55]:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        data = buf.getvalue()
+        if len(data) <= 400 * 1024:
+            print(f"[reverse_image] Compressed to {len(data)//1024}KB")
+            return base64.standard_b64encode(data).decode("utf-8")
+    return base64.standard_b64encode(data).decode("utf-8")
 
 
-async def extract_listing_details_with_gpt4o(
-    url: str,
-    claimed_address: str,
-    claimed_price: str,
-    claimed_landlord: str
-) -> dict:
-    """Layer 2: Fetch page and use GPT-4o to extract and compare listing details."""
+def upload_to_imgbb(image_b64: str) -> str | None:
+    """Upload to imgbb to get a public URL for SerpAPI."""
+    if not IMGBB_API_KEY:
+        print("[reverse_image] ERROR: IMGBB_API_KEY not set")
+        return None
     try:
-        page_response = httpx.get(
-            url,
-            timeout=15,
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resp = httpx.post(
+            "https://api.imgbb.com/1/upload",
+            params={"key": IMGBB_API_KEY},
+            data={"image": image_b64},
+            timeout=20
         )
-        page_text = page_response.text[:8000]
+        if resp.status_code == 200:
+            url = resp.json()["data"]["url"]
+            print(f"[reverse_image] imgbb URL: {url}")
+            return url
+        print(f"[reverse_image] imgbb error {resp.status_code}")
+        return None
     except Exception as e:
-        return {
-            "url": url,
-            "error": f"Could not fetch page: {str(e)}",
-            "mismatches": [],
-            "fraud_signals": []
-        }
+        print(f"[reverse_image] imgbb failed: {e}")
+        return None
 
-    system_prompt = """You are a forensic real estate analyst helping detect rental fraud.
-You will be given the HTML/text content of a real estate listing page and details that a suspected scammer claimed.
-Extract the listing details from the page and compare them against the claimed details.
 
-Respond ONLY with a valid JSON object — no markdown, no code fences, no extra text:
+def get_platform(url: str) -> str | None:
+    """Return the platform name if URL is from a known real estate domain."""
+    for domain, name in REAL_ESTATE_DOMAINS.items():
+        if domain in url:
+            return name
+    return None
 
-{
-  "found_address": "address found on the page or null",
-  "found_price": "price found on the page or null",
-  "found_landlord": "landlord or property management company found on the page or null",
-  "found_platform": "name of the real estate platform (e.g. Zillow, Apartments.com)",
-  "mismatches": ["list of specific mismatches between claimed and found details"],
-  "fraud_signals": ["list of specific fraud signals detected"],
-  "summary": "one sentence summary of findings"
-}"""
 
-    response = await openai_client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=800,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"""Real estate page content from {url}:
+def reverse_image_search(image_bytes: bytes) -> list[dict]:
+    """
+    Compress image, upload to imgbb, reverse search via SerpAPI.
+    Returns list of {platform, url} for all real estate matches found.
+    """
+    image_b64 = compress_and_encode(image_bytes)
+    public_url = upload_to_imgbb(image_b64)
 
-{page_text}
+    if not public_url:
+        return []
 
----
-What the suspected scammer claimed:
-- Address: {claimed_address}
-- Monthly rent: {claimed_price}
-- Landlord/Contact: {claimed_landlord}
+    try:
+        search = GoogleSearch({
+            "engine": "google_reverse_image",
+            "image_url": public_url,
+            "api_key": SERPAPI_API_KEY,
+        })
+        data = search.get_dict()
 
-Extract the listing details from the page and identify any mismatches."""
-            }
-        ]
-    )
+        all_urls = []
+        for r in data.get("image_results", []):
+            if "link" in r:
+                all_urls.append(r["link"])
+        for r in data.get("inline_images", []):
+            if "link" in r:
+                all_urls.append(r["link"])
 
-    raw = response.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+        print(f"[reverse_image] SerpAPI found {len(all_urls)} total URLs")
 
-    result = json.loads(raw.strip())
-    result["url"] = url
-    return result
+        # Filter to real estate platforms only
+        matches = []
+        seen_platforms = set()
+        for url in all_urls:
+            platform = get_platform(url)
+            if platform and platform not in seen_platforms:
+                matches.append({"platform": platform, "url": url})
+                seen_platforms.add(platform)
+                print(f"[reverse_image] RE match: {platform} — {url}")
+
+        return matches
+
+    except Exception as e:
+        print(f"[reverse_image] SerpAPI failed: {e}")
+        return []
 
 
 async def check_reverse_image(
@@ -135,80 +123,73 @@ async def check_reverse_image(
     claimed_price: str,
     claimed_landlord: str
 ) -> dict:
-    """Main entry point for the Reverse Image Agent."""
+    """
+    Main entry point for the Reverse Image Agent.
+    Checks if listing photos appear on real estate platforms.
+    Does NOT scrape pages — just confirms presence on platforms.
+    The signal: same photo on Zillow/Trulia at a different address = stolen listing.
+    """
+    print(f"[reverse_image] Image size: {len(image_bytes)//1024}KB")
 
-    all_urls = reverse_image_search(image_bytes)
-
-    if not all_urls:
+    try:
+        matches = reverse_image_search(image_bytes)
+    except Exception as e:
+        print(f"[reverse_image] Failed: {e}")
         return {
-            "agent": "reverse_image",
-            "status": "no_results",
-            "score": 50,
-            "verdict": "No matching images found online. Photo may be original or not indexed.",
-            "real_estate_matches": [],
-            "mismatches": [],
-            "fraud_signals": [],
-            "red_flags": [],
-            "summary": "No reverse image matches found — cannot confirm or deny stolen photo."
+            "agent": "reverse_image", "status": "error", "score": 50,
+            "verdict": f"Reverse image search failed: {e}",
+            "platforms_found": [], "real_estate_matches": [],
+            "mismatches": [], "fraud_signals": [], "red_flags": [],
+            "summary": f"Search error: {e}"
         }
 
-    real_estate_urls = filter_real_estate_urls(all_urls)
-
-    if not real_estate_urls:
+    if not matches:
+        print("[reverse_image] No real estate platform matches found")
         return {
-            "agent": "reverse_image",
-            "status": "no_real_estate_match",
-            "score": 60,
-            "verdict": "Photo found online but not on any real estate platform.",
-            "all_urls_found": all_urls[:5],
-            "real_estate_matches": [],
-            "mismatches": [],
-            "fraud_signals": [],
-            "red_flags": [],
-            "summary": "Photo exists online but was not found on known real estate platforms."
+            "agent": "reverse_image", "status": "no_results", "score": 60,
+            "verdict": "Photo not found on any known real estate platform.",
+            "platforms_found": [], "real_estate_matches": [],
+            "mismatches": [], "fraud_signals": [], "red_flags": [],
+            "summary": "No reverse image matches on real estate platforms — photo may be original."
         }
 
-    # Run all Layer 2 fetches concurrently
-    import asyncio
-    tasks = [
-        extract_listing_details_with_gpt4o(
-            url=url,
-            claimed_address=claimed_address,
-            claimed_price=claimed_price,
-            claimed_landlord=claimed_landlord
-        )
-        for url in real_estate_urls[:3]
-    ]
-    real_estate_matches = await asyncio.gather(*tasks)
+    # Photo found on real estate platforms — this is the signal
+    platform_names = [m["platform"] for m in matches]
+    platforms_str = ", ".join(platform_names)
 
-    all_mismatches = []
-    all_fraud_signals = []
-    for match in real_estate_matches:
-        all_mismatches.extend(match.get("mismatches", []))
-        all_fraud_signals.extend(match.get("fraud_signals", []))
+    # Check if any URL contains a different address than what was claimed
+    address_keywords = claimed_address.lower().replace(",", "").split()
+    url_mismatches = []
+    for m in matches:
+        url_lower = m["url"].lower()
+        # If none of the address keywords appear in the URL, it's a different property
+        if not any(kw in url_lower for kw in address_keywords if len(kw) > 3):
+            url_mismatches.append(f"Photo found on {m['platform']} at a different address: {m['url']}")
 
-    is_stolen = len(all_mismatches) > 0
-    score = max(0, 20 - (len(all_mismatches) * 10)) if is_stolen else 40
+    is_suspicious = len(url_mismatches) > 0
+    score = 15 if is_suspicious else 45
 
-    verdict = (
-        f"Photo found on {len(real_estate_matches)} real estate platform(s) with mismatches — strong hijacked listing signal."
-        if is_stolen else
-        f"Photo found on {len(real_estate_matches)} real estate platform(s) but details appear consistent."
-    )
+    if is_suspicious:
+        verdict = f"Photo found on {platforms_str} — URLs suggest a different property than claimed."
+        red_flags = url_mismatches + [f"Listing photo appears on {platforms_str}"]
+    else:
+        verdict = f"Photo found on {platforms_str} — may be legitimate cross-posting or stolen."
+        red_flags = [f"Listing photo appears on {platforms_str} — verify manually"]
 
-    summaries = [m.get("summary", "") for m in real_estate_matches if m.get("summary")]
+    print(f"[reverse_image] Done — platforms={platform_names}, suspicious={is_suspicious}, score={score}")
 
     return {
         "agent": "reverse_image",
         "status": "analyzed",
         "score": score,
-        "is_stolen": is_stolen,
+        "is_stolen": is_suspicious,
         "verdict": verdict,
-        "real_estate_matches": list(real_estate_matches),
-        "mismatches": all_mismatches,
-        "fraud_signals": all_fraud_signals,
-        "red_flags": all_mismatches + all_fraud_signals,
-        "total_urls_found": len(all_urls),
-        "real_estate_urls_found": len(real_estate_urls),
-        "summary": summaries[0] if summaries else verdict
+        "platforms_found": platform_names,
+        "real_estate_matches": matches,
+        "mismatches": url_mismatches,
+        "fraud_signals": red_flags,
+        "red_flags": red_flags,
+        "total_urls_found": len(matches),
+        "real_estate_urls_found": len(matches),
+        "summary": verdict
     }

@@ -24,6 +24,7 @@ Return ONLY valid JSON in exactly this format:
 }
 """
 
+
 def get_market_rent(zip_code: str) -> str:
     api_key = os.getenv("RENTCAST_API_KEY")
     url = f"https://api.rentcast.io/v1/markets?zipCode={zip_code}"
@@ -40,28 +41,8 @@ def get_market_rent(zip_code: str) -> str:
     except Exception as e:
         return f"API connection failed: {str(e)}. Fallback average rent is $2100."
 
-def get_commute_time(origin: str, destination: str) -> str:
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-
-    try:
-        response = requests.get(
-            "https://maps.googleapis.com/maps/api/distancematrix/json",
-            params={"origins": origin, "destinations": destination, "mode": "transit", "key": api_key}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            element = data.get("rows", [{}])[0].get("elements", [{}])[0]
-            if element.get("status") == "OK":
-                return f"Transit commute from {origin} to {destination}: {element['duration']['text']} ({element['distance']['text']})"
-
-        print("⚠️ Google Maps Distance Matrix failed. Using fallback.")
-        return f"Estimated transit commute from {origin} to {destination}: approximately 45 minutes."
-    except Exception as e:
-        return f"Commute calculation failed: {str(e)}. Estimated commute is approximately 45 minutes."
-
 
 def parse_rent_value(rent_str: str) -> float | None:
-    """Extracts a numeric rent value from a string like '$1,400/mo' or '1400'."""
     try:
         cleaned = rent_str.replace("$", "").replace(",", "").replace("/mo", "").strip()
         return float(cleaned)
@@ -72,21 +53,19 @@ def parse_rent_value(rent_str: str) -> float | None:
 async def check_property_data(
     zip_code: str,
     asking_rent: str,
-    listing_address: str,
-    office_address: str
+    listing_address: str
 ) -> dict:
     try:
         market_data = get_market_rent(zip_code)
-        commute_data = get_commute_time(listing_address, office_address)
 
         user_prompt = f"""
         User Input:
         - Zip Code: {zip_code}
         - Asking Rent: ${asking_rent}
+        - Listing Address: {listing_address}
 
         Live API Data:
         - Market Rent Tool Output: {market_data}
-        - Commute Tool Output: {commute_data}
         """
 
         response = await client.chat.completions.create(
@@ -100,11 +79,9 @@ async def check_property_data(
         )
 
         parsed = json.loads(response.choices[0].message.content)
-
         risk = parsed.get("risk_level", "LOW").upper()
         score = {"LOW": 80, "MEDIUM": 45, "HIGH": 15}.get(risk, 50)
 
-        # Calculate rent deviation percentage for the orchestrator audit log
         asking = parse_rent_value(str(asking_rent))
         market = parse_rent_value(str(parsed.get("market_average", "")))
         rent_deviation_pct = None
@@ -120,8 +97,7 @@ async def check_property_data(
             "asking_rent": asking_rent,
             "rent_deviation_pct": rent_deviation_pct,
             "findings": parsed.get("findings", []),
-            "summary": parsed.get("summary", ""),
-            "commute": commute_data
+            "summary": parsed.get("summary", "")
         }
 
     except Exception as e:

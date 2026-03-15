@@ -1,55 +1,146 @@
-# RentGuard: Automated Forensic Rental Investigation Pipeline
+# SubletShield
 
-RentGuard is an intelligent, agent-based forensic platform built to protect Ann Arbor students from the rising tide of rental scams. Instead of relying on a single AI chatbot, RentGuard employs a **4-Layer Verification Pipeline** that cross-references the legal, physical, economic, and visual realities of every listing to deliver a high-confidence fraud verdict.
+**Paste a listing. 30 seconds. Know if it's real.**
 
-
-
----
-
-## 🛡️ The 4-Layer Verification Pipeline
-
-RentGuard runs four specialized AI agents in parallel to ensure a comprehensive investigation:
-
-1. **Legal Reality (Contract Agent):** Scrutinizes lease agreements for illegal clauses, signatory irregularities, and Michigan-specific housing ordinance violations.
-2. **Economic Reality (Property Agent):** Cross-references live market data via **RentCast** and transit times via **Google Maps** to detect "Bait Pricing."
-3. **Visual Reality (Reverse Image Agent):** Performs global reverse image searches across major real estate platforms, using **GPT-4o Vision** to detect hijacked photos or mismatched listing details.
-4. **Physical Reality (Street View Agent):** Fetches official imagery from **Google Street View** and uses forensic visual comparison to verify if the listing photos match the actual property architecture.
+SubletShield is an AI-powered multi-agent system that investigates rental listings for fraud. Built for university students searching for sublets remotely, it catches stolen photos, fake addresses, bait pricing, and suspicious lease clauses — before a student sends a single dollar.
 
 ---
 
-## 🚀 Key Features
+## The Problem
 
-* **Asynchronous Orchestration:** Built with `asyncio`, our engine fires all four agents concurrently, reducing analysis time from minutes to seconds.
-* **The "Verdict" Engine:** Our `Orchestrator` uses weighted risk modeling to synthesize conflicting reports from different agents into a single, reliable **Trust Score**.
-* **Automated Action Kit:** If a listing is flagged as a scam, RentGuard automatically generates a tailored response for the landlord and provides direct links to the **FTC, IC3, and UMich Housing authorities**.
-* **Forensic Reporting:** Generates a clean, actionable summary report that students can present to local authorities as physical evidence.
+Rental scams explicitly target college students relocating for internships. Students browse listings remotely, under time pressure, with no way to verify what they're looking at. Scammers steal photos from Zillow and Realtor.com, post fake listings at 50–60% below market rate, and pressure victims into sending deposits via Zelle before they can verify anything. The FBI tracked $173.5 million in direct rental fraud losses in 2024. Ages 18–29 are 42% more likely to be victimized than any other group.
 
 ---
 
-## 🛠️ Technical Stack
+## How It Works
 
-* **Intelligence:** GPT-4o & GPT-4o-mini (Orchestration & Forensic Analysis).
-* **Backend:** FastAPI (Asynchronous REST API).
-* **Data Sources:** RentCast API, Google Maps API, SerpAPI (Reverse Image).
-* **Infrastructure:** Multi-agent design pattern with parallel `asyncio` task execution.
+A student pastes raw listing text, uploads a photo, and optionally attaches a lease PDF. Four agents run in parallel and return a **Trust Score (0–100)**, a verdict, and an **Action Kit**.
 
+### The 4 Agents
 
+| Agent | What it does |
+|---|---|
+| **Contract Agent** | Scans lease PDFs for illegal clauses, Zelle payment demands, missing signatures, and Ann Arbor-specific compliance issues |
+| **Market Data Agent** | Calls the Rentcast API to compare asking rent against the live market average for the zip code |
+| **Street View Agent** | Fetches Google Street View of the claimed address and uses GPT-4o vision to detect building mismatches |
+| **Reverse Image Agent** | Compresses the listing photo, uploads it to imgbb, and runs a Google reverse image search via SerpAPI to find if the photo appears at a different address |
+
+### The Orchestrator
+
+Runs all 4 agents in parallel, applies weighted scoring, detects cross-agent fraud correlations (e.g. Street View mismatch + stolen photo = Photo Fraud alert), generates a plain-English investigation summary, and produces an Action Kit with specific steps, a copy-paste landlord reply, and FTC/IC3 reporting links.
+
+### Scoring Weights
+
+| Agent | Weight |
+|---|---|
+| Contract | 40% |
+| Street View | 25% |
+| Market Data | 20% |
+| Reverse Image | 15% |
+
+### Verdicts
+
+| Trust Score | Verdict |
+|---|---|
+| 0–39 | Likely Scam |
+| 40–69 | Investigate Further |
+| 70–100 | Appears Legitimate |
 
 ---
 
-## 📊 How it Works
+## Demo
 
-1. **Ingestion:** User uploads raw listing text and optional lease PDF via the `/investigate` endpoint.
-2. **Parallel Investigation:** The `Orchestrator` triggers all four agents simultaneously.
-3. **Synthesis:** Findings are normalized into a structured `Audit Log`.
-4. **Verdict:** System outputs a `Likely Scam / Investigate / Legitimate` verdict with an integrated `Action Kit`.
+**Listing:** 616 Pauline Blvd, Ann Arbor — $1,200/mo, 2BR/1BA
 
-## 📝 Getting Started
+**Result:** Trust Score **14 / 100** — Likely Scam
 
-1. **Clone the repository.**
-2. **Set environment variables** in a `.env` file:
-   ```env
-   OPENAI_API_KEY=your_key
-   RENTCAST_API_KEY=your_key
-   GOOGLE_MAPS_API_KEY=your_key
-   SERPAPI_API_KEY=your_key
+| Agent | Score | Finding |
+|---|---|---|
+| Contract | 15 | Wire transfer payment clause detected |
+| Market Data | 15 | $1,200 vs $2,800 market average — 57.1% below market |
+| Street View | 10 | Building mismatch — different roofline, exterior material, structure type |
+| Reverse Image | 15 | Photo found on Zillow and Realtor.com at a different address |
+
+---
+
+## Tech Stack
+
+- **Backend:** Python, FastAPI
+- **Frontend:** React, Vite
+- **AI Models:** OpenAI GPT-4o (vision), OpenAI GPT-4o-mini (text extraction, summaries)
+- **APIs:** Rentcast, Google Street View Static API, Google Maps API, SerpAPI, imgbb
+
+---
+
+## Project Structure
+```
+subletshield/
+├── main.py                    # FastAPI app, all routes
+├── orchestrator.py            # Parallel agent execution, scoring, synthesis
+├── listing_parser.py          # GPT-4o-mini listing text parser
+├── agents/
+│   ├── contract_agent.py      # Lease PDF analysis
+│   ├── property_agent.py      # Market data + bait pricing detection
+│   ├── street_view_agent.py   # Google Street View + GPT-4o vision comparison
+│   └── reverse_image_agent.py # Photo reverse search via SerpAPI
+└── frontend/                  # React + Vite frontend
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+
+### Installation
+```bash
+# Clone the repo
+git clone https://github.com/yourusername/subletshield.git
+cd subletshield
+
+# Install backend dependencies
+pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+```
+
+### Environment Variables
+
+Create a `.env` file in the root directory:
+```env
+OPENAI_API_KEY=your_openai_api_key
+RENTCAST_API_KEY=your_rentcast_api_key
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+SERPAPI_API_KEY=your_serpapi_api_key
+IMGBB_API_KEY=your_imgbb_api_key
+```
+
+### Running the App
+```bash
+# Start the backend
+uvicorn main:app --reload
+
+# Start the frontend (in a separate terminal)
+cd frontend
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/investigate` | Main endpoint — full multi-agent investigation |
+| POST | `/parse-listing` | Parse raw listing text into structured fields |
+| POST | `/check-contract` | Run contract agent only |
+| POST | `/check-property` | Run market data agent only |
+| POST | `/check-street-view` | Run street view agent only |
+| POST | `/check-reverse-image` | Run reverse image agent only |

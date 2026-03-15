@@ -31,10 +31,9 @@ async def contract_route(file: UploadFile = File(...)):
 async def property_route(
     zip_code: str = Form(...),
     asking_rent: str = Form(...),
-    listing_address: str = Form(...),
-    office_address: str = Form(...)
+    listing_address: str = Form(...)
 ):
-    return await check_property_data(zip_code, asking_rent, listing_address, office_address)
+    return await check_property_data(zip_code, asking_rent, listing_address)
 
 
 @app.post("/check-street-view")
@@ -74,9 +73,8 @@ async def parse_listing_route(listing_text: str = Form(...)):
 @app.post("/investigate")
 async def investigate(
     listing_text: str = Form(...),
-    office_address: str = Form(...),
     lease_pdf: Optional[UploadFile] = File(None),
-    listing_images: Optional[List[UploadFile]] = File(None),  # Multiple images
+    listing_images: Optional[List[UploadFile]] = File(None),
 ):
     """
     Main endpoint. Accepts multiple listing images.
@@ -86,18 +84,25 @@ async def investigate(
     parsed = await parse_listing(listing_text)
     contract_bytes = await lease_pdf.read() if lease_pdf else None
 
-    # Read all uploaded images
+    # Read all uploaded images — handle None, single file, and list
     images_bytes = []
     if listing_images:
+        # FastAPI may return a single UploadFile or a list depending on how form is sent
+        if not isinstance(listing_images, list):
+            listing_images = [listing_images]
         for img in listing_images:
-            images_bytes.append(await img.read())
+            if img and img.filename:  # Skip empty file slots
+                data = await img.read()
+                if data:  # Skip empty reads
+                    images_bytes.append(data)
+    print(f"[investigate] received {len(images_bytes)} image(s)")
 
     result = await orchestrator.run(
         contract_bytes=contract_bytes,
         zip_code=parsed.get("zip_code") or "00000",
         asking_rent=parsed.get("asking_rent") or "0",
         listing_address=parsed.get("full_address") or "Unknown Address",
-        office_address=office_address,
+
         listing_images=images_bytes,
         claimed_landlord=parsed.get("landlord_name") or "Unknown",
         claimed_price=f"${parsed.get('asking_rent')}/mo" if parsed.get("asking_rent") else "Unknown",

@@ -1,9 +1,13 @@
 import asyncio
 from typing import Optional
+from openai import AsyncOpenAI
 from agents.contract_agent import check_contract
 from agents.property_agent import check_property_data
 from agents.street_view_agent import check_street_view_reality
 from agents.reverse_image_agent import check_reverse_image
+import os
+
+_openai = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 
 class Orchestrator:
@@ -14,7 +18,6 @@ class Orchestrator:
         zip_code: str,
         asking_rent: str,
         listing_address: str,
-        office_address: str,
         listing_images: list[bytes],   # Now a list — supports multiple photos
         claimed_landlord: str,
         claimed_price: str,
@@ -34,9 +37,10 @@ class Orchestrator:
             tasks.append(self._skip("contract", "No lease document provided."))
 
         # Property agent
-        tasks.append(check_property_data(zip_code, asking_rent, listing_address, office_address))
+        tasks.append(check_property_data(zip_code, asking_rent, listing_address))
 
-        # Street View — uses first image only
+        # Normalize — filter out any empty entries
+        listing_images = [img for img in listing_images if img]
         first_image = listing_images[0] if listing_images else None
         if first_image:
             tasks.append(check_street_view_reality(listing_address, first_image))
@@ -64,7 +68,14 @@ class Orchestrator:
             "reverse_image": self._safe(reverse_image_result, "reverse_image"),
         }
 
-        return self.synthesize(results)
+        # street_view agent returns "verdict" — alias to "summary" for consistency
+        if "summary" not in results["street_view"] and "verdict" in results["street_view"]:
+            results["street_view"]["summary"] = results["street_view"]["verdict"]
+        # reverse_image agent returns "verdict" too
+        if "summary" not in results["reverse_image"] and "verdict" in results["reverse_image"]:
+            results["reverse_image"]["summary"] = results["reverse_image"]["verdict"]
+
+        return await self.synthesize(results)
 
     async def _run_reverse_image_all(
         self,
@@ -154,7 +165,7 @@ class Orchestrator:
             }
         return result
 
-    def synthesize(self, results: dict) -> dict:
+    async def synthesize(self, results: dict) -> dict:
         weights = {"contract": 0.40, "street_view": 0.25, "property": 0.20, "reverse_image": 0.15}
         weighted_score = sum(results[k].get("score", 50) * weights[k] for k in weights)
 
@@ -171,7 +182,7 @@ class Orchestrator:
                 "market_average": results["property"].get("market_average"),
                 "deviation_pct": results["property"].get("rent_deviation_pct"),
                 "price_discrepancy_flag": results["property"].get("price_discrepancy_flag"),
-                "commute": results["property"].get("commute")
+
             },
             "contract_compliance": {
                 "signatory_name": signatory_name,
@@ -222,7 +233,7 @@ class Orchestrator:
                 "steps": [
                     "Stop all communication with this landlord immediately.",
                     "Do not send any money, deposits, or personal documents.",
-                    "Save this report as a PDF for campus housing or local police.",
+                    "Screenshot this report and share it with your campus housing office if needed.",
                     "Submit a formal report to the FTC and IC3."
                 ],
                 "copy_paste_reply": (
@@ -329,9 +340,20 @@ class Orchestrator:
 
         # ─────────────────────────────────────────────────────────────────────
 
+        # ── Generate plain-English investigation summary ─────────────────────
+        investigation_summary = await self._generate_summary(
+            verdict=verdict,
+            trust_score=round(weighted_score, 1),
+            agent_summaries={k: results[k].get("summary", "") for k in weights},
+            red_flags=all_red_flags,
+            correlations=correlations,
+            audit_log=audit_log
+        )
+
         return {
             "trust_score": round(weighted_score, 1),
             "verdict": verdict,
+            "investigation_summary": investigation_summary,
             "red_flags": list(set(all_red_flags)),
             "audit_log": audit_log,
             "evidence_summary": {
@@ -343,6 +365,74 @@ class Orchestrator:
             "action_kit": action_kit,
             "correlations": correlations
         }
+
+    async def _generate_summary(
+        self,
+        verdict: str,
+        trust_score: float,
+        agent_summaries: dict,
+        red_flags: list,
+        correlations: list,
+        audit_log: dict
+    ) -> str:
+        """
+        Generates a 2-3 sentence plain-English summary of all agent findings.
+        Written for a student who needs to understand the risk immediately.
+        """
+        try:
+            # Build context from agent findings
+            price_info = ""
+            if audit_log.get("property_analysis", {}).get("deviation_pct"):
+                pct = audit_log["property_analysis"]["deviation_pct"]
+                asking = audit_log["property_analysis"].get("asking_rent", "?")
+                avg = audit_log["property_analysis"].get("market_average", "?")
+                price_info = f"Asking rent ${asking}/mo is {pct}% below market average of ${avg}/mo."
+
+            sv_match = audit_log.get("visual_verification", {}).get("street_view_match")
+            sv_info = ""
+            if sv_match is False:
+                sv_info = "The listing photo does not match the building at the claimed address on Google Street View."
+            elif sv_match is True:
+                sv_info = "The listing photo is consistent with the property on Google Street View."
+
+            ri_platforms = audit_log.get("visual_verification", {}).get("real_estate_matches", [])
+            ri_info = ""
+            if ri_platforms:
+                names = list(set(m.get("platform", "") for m in ri_platforms if m.get("platform")))
+                ri_info = f"The listing photo was found on {', '.join(names)}."
+
+            contract_flags = audit_log.get("contract_compliance", {}).get("illegal_clauses", [])
+            contract_info = f"{len(contract_flags)} suspicious lease clause(s) detected." if contract_flags else ""
+
+            context = "\n".join(filter(None, [price_info, sv_info, ri_info, contract_info]))
+            top_flags = red_flags[:5] if red_flags else []
+
+            prompt = f"""Summarize this rental fraud investigation in exactly 2 short sentences for a university student.
+
+Key findings: {context}
+
+Rules:
+- Sentence 1: State the single most damning finding with specific numbers (e.g. "$1200 is 57% below the $2800 market average", "photo found on Zillow at a different address"). NEVER mention trust score numbers or verdict labels like "Likely Scam".
+- Sentence 2: One clear action — "Do not send money." or "Verify ownership before paying." or "Confirm details before signing."
+- Max 35 words total. Start directly with the finding. No filler."""
+
+            response = await _openai.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=100,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content.strip()
+
+        except Exception as e:
+            print(f"[orchestrator] Summary generation failed: {e}")
+            # Fallback to a basic summary
+            if verdict == "Likely Scam":
+                return f"This listing scored {trust_score}/100 and shows multiple fraud signals. Do not send any money or personal information to this landlord."
+            elif verdict == "Investigate Further":
+                return f"This listing scored {trust_score}/100 and has suspicious signals worth investigating before proceeding. Verify the landlord's identity and property ownership before paying anything."
+            else:
+                return f"This listing scored {trust_score}/100 and appears relatively legitimate. Perform standard due diligence before signing."
 
 
 orchestrator = Orchestrator()
