@@ -10,46 +10,43 @@ class Orchestrator:
 
     async def run(
         self,
-        # Contract inputs
         contract_bytes: Optional[bytes],
-        # Property inputs
         zip_code: str,
         asking_rent: str,
         listing_address: str,
         office_address: str,
-        # Street view inputs
-        listing_image_bytes: Optional[bytes],
-        # Reverse image inputs
+        listing_images: list[bytes],   # Now a list — supports multiple photos
         claimed_landlord: str,
         claimed_price: str,
     ) -> dict:
         """
-        Runs all 4 agents in parallel and synthesizes results into a
-        single trust score, verdict, and action kit.
+        Runs all 4 agents in parallel and synthesizes results.
+        - Street View uses the first image (exterior comparison)
+        - Reverse image search runs on ALL images (catches partial photo theft)
         """
 
-        # Build tasks — handle optional inputs gracefully
         tasks = []
 
-        # Contract agent (optional — lease PDF may not be provided)
+        # Contract agent
         if contract_bytes:
             tasks.append(check_contract(contract_bytes))
         else:
             tasks.append(self._skip("contract", "No lease document provided."))
 
-        # Property agent (always runs)
+        # Property agent
         tasks.append(check_property_data(zip_code, asking_rent, listing_address, office_address))
 
-        # Street view agent (optional — listing image may not be provided)
-        if listing_image_bytes:
-            tasks.append(check_street_view_reality(listing_address, listing_image_bytes))
+        # Street View — uses first image only
+        first_image = listing_images[0] if listing_images else None
+        if first_image:
+            tasks.append(check_street_view_reality(listing_address, first_image))
         else:
             tasks.append(self._skip("street_view", "No listing image provided."))
 
-        # Reverse image agent (optional — listing image may not be provided)
-        if listing_image_bytes:
-            tasks.append(check_reverse_image(
-                image_bytes=listing_image_bytes,
+        # Reverse image — runs on ALL images, merges results
+        if listing_images:
+            tasks.append(self._run_reverse_image_all(
+                images=listing_images,
                 claimed_address=listing_address,
                 claimed_price=claimed_price,
                 claimed_landlord=claimed_landlord
@@ -57,22 +54,87 @@ class Orchestrator:
         else:
             tasks.append(self._skip("reverse_image", "No listing image provided."))
 
-        # Run all agents in parallel
         contract_result, property_result, street_view_result, reverse_image_result = \
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Replace any exceptions with safe fallback dicts
         results = {
-            "contract": self._safe(contract_result, "contract"),
-            "property": self._safe(property_result, "property"),
-            "street_view": self._safe(street_view_result, "street_view"),
+            "contract":      self._safe(contract_result,      "contract"),
+            "property":      self._safe(property_result,      "property"),
+            "street_view":   self._safe(street_view_result,   "street_view"),
             "reverse_image": self._safe(reverse_image_result, "reverse_image"),
         }
 
         return self.synthesize(results)
 
+    async def _run_reverse_image_all(
+        self,
+        images: list[bytes],
+        claimed_address: str,
+        claimed_price: str,
+        claimed_landlord: str
+    ) -> dict:
+        """
+        Runs reverse image search on each photo concurrently,
+        then merges all findings into a single result.
+        """
+        tasks = [
+            check_reverse_image(
+                image_bytes=img,
+                claimed_address=claimed_address,
+                claimed_price=claimed_price,
+                claimed_landlord=claimed_landlord
+            )
+            for img in images
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Merge all results — collect all mismatches, fraud signals, matches
+        all_mismatches = []
+        all_fraud_signals = []
+        all_red_flags = []
+        all_real_estate_matches = []
+        any_stolen = False
+        min_score = 100
+        summaries = []
+
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                continue
+            all_mismatches.extend(r.get("mismatches", []))
+            all_fraud_signals.extend(r.get("fraud_signals", []))
+            all_red_flags.extend(r.get("red_flags", []))
+            all_real_estate_matches.extend(r.get("real_estate_matches", []))
+            if r.get("is_stolen"):
+                any_stolen = True
+            if r.get("score") is not None:
+                min_score = min(min_score, r["score"])
+            if r.get("summary"):
+                summaries.append(f"Photo {i+1}: {r['summary']}")
+
+        photos_checked = len([r for r in results if not isinstance(r, Exception)])
+        stolen_count = sum(1 for r in results if not isinstance(r, Exception) and r.get("is_stolen"))
+
+        if any_stolen:
+            verdict = f"{stolen_count}/{photos_checked} photos found on real estate platforms with mismatches — hijacked listing signal."
+        else:
+            verdict = f"{photos_checked} photos checked — no stolen photo evidence detected."
+
+        return {
+            "agent": "reverse_image",
+            "status": "analyzed",
+            "score": min_score if min_score < 100 else 60,
+            "is_stolen": any_stolen,
+            "photos_checked": photos_checked,
+            "stolen_count": stolen_count,
+            "verdict": verdict,
+            "real_estate_matches": all_real_estate_matches,
+            "mismatches": list(set(all_mismatches)),
+            "fraud_signals": list(set(all_fraud_signals)),
+            "red_flags": list(set(all_red_flags)),
+            "summary": summaries[0] if summaries else verdict
+        }
+
     async def _skip(self, agent: str, reason: str) -> dict:
-        """Returns a neutral result for agents that were skipped due to missing input."""
         return {
             "agent": agent,
             "score": 50,
@@ -82,7 +144,6 @@ class Orchestrator:
         }
 
     def _safe(self, result, agent: str) -> dict:
-        """Ensures agent result is a dict even if it threw an exception."""
         if isinstance(result, Exception):
             return {
                 "agent": agent,
@@ -94,32 +155,16 @@ class Orchestrator:
         return result
 
     def synthesize(self, results: dict) -> dict:
-        """
-        Synthesizes agent data into a verdict, action kit, and a
-        transparent audit log for data analysis scoring.
-        """
+        weights = {"contract": 0.40, "street_view": 0.25, "property": 0.20, "reverse_image": 0.15}
+        weighted_score = sum(results[k].get("score", 50) * weights[k] for k in weights)
 
-        # 1. Weighted scoring — contract is heaviest (most reliable signal)
-        weights = {
-            "contract": 0.40,
-            "street_view": 0.25,
-            "property": 0.20,
-            "reverse_image": 0.15
-        }
-        weighted_score = sum(
-            results[k].get("score", 50) * weights[k] for k in weights
-        )
-
-        # 2. Cross-reference: signatory name vs property agent landlord
         signatory_name = results["contract"].get("signatory_name")
         name_mismatch_flag = False
         if signatory_name and signatory_name.lower() not in ["not found", "none", ""]:
-            # Flag if contract signatory doesn't appear in property findings
             property_summary = results["property"].get("summary", "").lower()
             if signatory_name.lower() not in property_summary:
                 name_mismatch_flag = True
 
-        # 3. Build audit log (the "evidence box" for judges)
         audit_log = {
             "property_analysis": {
                 "asking_rent": results["property"].get("asking_rent"),
@@ -143,21 +188,21 @@ class Orchestrator:
                 "street_view_confidence": results["street_view"].get("confidence"),
                 "mismatching_features": results["street_view"].get("mismatching_features", []),
                 "reverse_image_stolen": results["reverse_image"].get("is_stolen", False),
+                "photos_checked": results["reverse_image"].get("photos_checked", 0),
+                "stolen_count": results["reverse_image"].get("stolen_count", 0),
                 "reverse_image_mismatches": results["reverse_image"].get("mismatches", []),
                 "real_estate_matches": results["reverse_image"].get("real_estate_matches", [])
             }
         }
 
-        # 4. Collect all red flags across agents
         all_red_flags = []
-        for agent_key in ["contract", "property", "street_view", "reverse_image"]:
-            r = results[agent_key]
+        for k in ["contract", "property", "street_view", "reverse_image"]:
+            r = results[k]
             all_red_flags.extend(r.get("findings", []))
             all_red_flags.extend(r.get("red_flags", []))
         if name_mismatch_flag and signatory_name:
             all_red_flags.append(f"Lease signatory '{signatory_name}' could not be verified against property records.")
 
-        # 5. Verdict logic — any DANGER agent overrides the score
         any_danger = any(r.get("status") == "DANGER" for r in results.values())
         if weighted_score < 40 or any_danger:
             verdict = "Likely Scam"
@@ -166,7 +211,6 @@ class Orchestrator:
         else:
             verdict = "Appears Legitimate"
 
-        # 6. Action kit for likely scams
         action_kit = None
         if verdict == "Likely Scam":
             action_kit = {
@@ -192,7 +236,7 @@ class Orchestrator:
         return {
             "trust_score": round(weighted_score, 1),
             "verdict": verdict,
-            "red_flags": list(set(all_red_flags)),  # Deduplicate
+            "red_flags": list(set(all_red_flags)),
             "audit_log": audit_log,
             "evidence_summary": [
                 str(results[k].get("summary", ""))
@@ -202,5 +246,6 @@ class Orchestrator:
             "agent_scores": {k: results[k].get("score", 50) for k in weights},
             "action_kit": action_kit
         }
+
 
 orchestrator = Orchestrator()

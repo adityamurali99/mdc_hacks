@@ -3,7 +3,7 @@ load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from typing import Optional, List
 
 from agents.contract_agent import check_contract
 from agents.property_agent import check_property_data
@@ -20,8 +20,6 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-
-# ── Individual agent routes (for testing) ─────────────────────────────────────
 
 @app.post("/check-contract")
 async def contract_route(file: UploadFile = File(...)):
@@ -68,73 +66,49 @@ async def reverse_image_route(
     )
 
 
-# ── Listing parser route ───────────────────────────────────────────────────────
-
 @app.post("/parse-listing")
 async def parse_listing_route(listing_text: str = Form(...)):
-    """
-    Parses raw listing text from Facebook Marketplace / Craigslist into
-    structured fields. Call this first to pre-fill the investigation.
-
-    Form fields:
-        listing_text - Raw text copied from the listing post
-    """
     return await parse_listing(listing_text)
 
 
-# ── Main orchestrator route ────────────────────────────────────────────────────
-
 @app.post("/investigate")
 async def investigate(
-    # Raw listing text — parsed server-side to extract address, rent, landlord
     listing_text: str = Form(...),
-    # Only field the student provides manually
     office_address: str = Form(...),
-    # Optional file uploads
     lease_pdf: Optional[UploadFile] = File(None),
-    listing_image: Optional[UploadFile] = File(None),
+    listing_images: Optional[List[UploadFile]] = File(None),  # Multiple images
 ):
     """
-    Main endpoint — parses the listing text, then runs all agents in parallel
-    and returns a unified trust score, verdict, audit log, and action kit.
-
-    Form fields:
-        listing_text    - Raw text copied from Facebook Marketplace / Craigslist
-        office_address  - Student's office or campus address for commute calc
-
-    Optional:
-        lease_pdf       - Lease document PDF (enables contract analysis)
-        listing_image   - Exterior photo from listing (enables street view + reverse image)
+    Main endpoint. Accepts multiple listing images.
+    - Street View comparison uses the first image
+    - Reverse image search runs on all images
     """
-
-    # Step 1: Parse the listing text into structured fields
     parsed = await parse_listing(listing_text)
-
-    # Step 2: Read uploaded files
     contract_bytes = await lease_pdf.read() if lease_pdf else None
-    image_bytes = await listing_image.read() if listing_image else None
 
-    # Step 3: Run all agents via orchestrator
+    # Read all uploaded images
+    images_bytes = []
+    if listing_images:
+        for img in listing_images:
+            images_bytes.append(await img.read())
+
     result = await orchestrator.run(
         contract_bytes=contract_bytes,
         zip_code=parsed.get("zip_code") or "00000",
         asking_rent=parsed.get("asking_rent") or "0",
         listing_address=parsed.get("full_address") or "Unknown Address",
         office_address=office_address,
-        listing_image_bytes=image_bytes,
+        listing_images=images_bytes,
         claimed_landlord=parsed.get("landlord_name") or "Unknown",
         claimed_price=f"${parsed.get('asking_rent')}/mo" if parsed.get("asking_rent") else "Unknown",
     )
 
-    # Step 4: Attach parsed listing data and early flags to the result
     result["parsed_listing"] = parsed
     result["listing_flags"] = parsed.get("listing_flags", [])
     result["missing_fields"] = parsed.get("missing_fields", [])
+    result["photos_submitted"] = len(images_bytes)
 
-    # Merge listing-level flags into red flags
     if parsed.get("listing_flags"):
-        result["red_flags"] = list(set(
-            result.get("red_flags", []) + parsed["listing_flags"]
-        ))
+        result["red_flags"] = list(set(result.get("red_flags", []) + parsed["listing_flags"]))
 
     return result
