@@ -130,10 +130,6 @@ cd frontend
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
-
----
-
 ## API Endpoints
 
 | Method | Endpoint | Description |
