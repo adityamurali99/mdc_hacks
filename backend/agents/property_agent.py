@@ -24,7 +24,6 @@ Return ONLY valid JSON in exactly this format:
 }
 """
 
-
 def get_market_rent(zip_code: str) -> str:
     api_key = os.getenv("RENTCAST_API_KEY")
     url = f"https://api.rentcast.io/v1/markets?zipCode={zip_code}"
@@ -40,7 +39,6 @@ def get_market_rent(zip_code: str) -> str:
             return f"Market data for {zip_code}: {{'averageRent': {mock_rent}, 'status': 'mocked_fallback'}}"
     except Exception as e:
         return f"API connection failed: {str(e)}. Fallback average rent is $2100."
-
 
 def get_commute_time(origin: str, destination: str) -> str:
     api_key = os.getenv("GOOGLE_MAPS_API_KEY")
