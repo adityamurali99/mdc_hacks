@@ -186,6 +186,10 @@ class Orchestrator:
                 "street_view_match": results["street_view"].get("consistent"),
                 "street_view_score": results["street_view"].get("score"),
                 "street_view_confidence": results["street_view"].get("confidence"),
+                "street_view_image": results["street_view"].get("street_view_image"),
+                "street_view_description": results["street_view"].get("street_view_description"),
+                "listing_description": results["street_view"].get("listing_description"),
+                "matching_features": results["street_view"].get("matching_features", []),
                 "mismatching_features": results["street_view"].get("mismatching_features", []),
                 "reverse_image_stolen": results["reverse_image"].get("is_stolen", False),
                 "photos_checked": results["reverse_image"].get("photos_checked", 0),
@@ -211,9 +215,10 @@ class Orchestrator:
         else:
             verdict = "Appears Legitimate"
 
-        action_kit = None
         if verdict == "Likely Scam":
             action_kit = {
+                "tone": "danger",
+                "headline": "Do not proceed with this listing.",
                 "steps": [
                     "Stop all communication with this landlord immediately.",
                     "Do not send any money, deposits, or personal documents.",
@@ -232,19 +237,111 @@ class Orchestrator:
                     "UMich Housing": "https://housing.umich.edu/off-campus-housing/"
                 }
             }
+        elif verdict == "Investigate Further":
+            action_kit = {
+                "tone": "warning",
+                "headline": "Proceed with caution — verify before paying anything.",
+                "steps": [
+                    "Do not send any deposit until you verify ownership independently.",
+                    "Request a video call walkthrough of the property with the landlord.",
+                    "Ask for a copy of the property tax record or utility bill showing their name.",
+                    "Search the address on your county assessor website to confirm the owner.",
+                    "Never pay via Zelle, Venmo, wire transfer, or crypto — use check or escrow only."
+                ],
+                "copy_paste_reply": (
+                    "Hi, I am interested in the listing but would like to verify a few things "
+                    "before proceeding. Could you provide proof of ownership such as a property "
+                    "tax statement or utility bill and do a live video walkthrough of the unit? "
+                    "I would also prefer to pay the deposit by check rather than digital transfer."
+                ),
+                "reporting_links": {
+                    "FTC": "https://reportfraud.ftc.gov/",
+                    "UMich Housing": "https://housing.umich.edu/off-campus-housing/"
+                }
+            }
+        else:
+            action_kit = {
+                "tone": "safe",
+                "headline": "Listing appears legitimate — a few final checks before you sign.",
+                "steps": [
+                    "Request a signed copy of the lease before sending any payment.",
+                    "Verify the landlord identity with a government-issued ID.",
+                    "Confirm the lease start date and terms match what was advertised.",
+                    "Document the property condition with photos on move-in day."
+                ],
+                "copy_paste_reply": (
+                    "Hi, everything looks good on my end. Before I send the deposit, "
+                    "could you send over the signed lease agreement and confirm payment "
+                    "instructions? I would like to pay by check if possible."
+                ),
+                "reporting_links": {
+                    "UMich Housing": "https://housing.umich.edu/off-campus-housing/"
+                }
+            }
+
+        # ── Cross-agent correlation ──────────────────────────────────────────
+        correlations = []
+
+        price_flagged = results["property"].get("price_discrepancy_flag", False)
+        language_flagged = any(
+            kw in f.lower()
+            for f in all_red_flags
+            for kw in ["zelle", "wire", "urgent", "asap", "sight unseen", "out of the country", "send deposit"]
+        )
+        sv_mismatch = results["street_view"].get("consistent") == False
+        img_stolen = results["reverse_image"].get("is_stolen", False)
+        contract_risky = results["contract"].get("risk_level") in ["HIGH", "MEDIUM"]
+
+        if price_flagged and language_flagged:
+            correlations.append({
+                "agents": ["Market Data", "Listing Language"],
+                "pattern": "bait_pricing",
+                "message": f"Price is {audit_log['property_analysis'].get('deviation_pct', '?')}% below market AND listing uses high-pressure language — classic bait-and-switch pattern.",
+                "severity": "high"
+            })
+
+        if sv_mismatch and img_stolen:
+            correlations.append({
+                "agents": ["Street View", "Reverse Image"],
+                "pattern": "photo_fraud",
+                "message": "Building exterior does not match Street View AND photos were found on another listing — photos are stolen from a different property.",
+                "severity": "high"
+            })
+
+        if contract_risky and price_flagged:
+            correlations.append({
+                "agents": ["Contract", "Market Data"],
+                "pattern": "document_fraud",
+                "message": "Lease contains suspicious clauses AND asking price is unrealistically low — both documents and pricing suggest coordinated fraud.",
+                "severity": "high"
+            })
+
+        agent_labels = {"contract": "Contract", "property": "Market Data", "street_view": "Street View", "reverse_image": "Reverse Image"}
+        flagged_agents = [k for k in weights if results[k].get("score", 50) < 50 and results[k].get("status") not in ["SKIPPED", "ERROR"]]
+        if len(flagged_agents) >= 3:
+            names = [agent_labels[a] for a in flagged_agents]
+            correlations.append({
+                "agents": names,
+                "pattern": "multi_agent_consensus",
+                "message": f"{', '.join(names)} all independently flagged this listing — multiple unrelated signals converging on the same conclusion significantly increases fraud likelihood.",
+                "severity": "high"
+            })
+
+        # ─────────────────────────────────────────────────────────────────────
 
         return {
             "trust_score": round(weighted_score, 1),
             "verdict": verdict,
             "red_flags": list(set(all_red_flags)),
             "audit_log": audit_log,
-            "evidence_summary": [
-                str(results[k].get("summary", ""))
+            "evidence_summary": {
+                k: str(results[k].get("summary", ""))
                 for k in ["contract", "property", "street_view", "reverse_image"]
                 if results[k].get("summary")
-            ],
+            },
             "agent_scores": {k: results[k].get("score", 50) for k in weights},
-            "action_kit": action_kit
+            "action_kit": action_kit,
+            "correlations": correlations
         }
 
 

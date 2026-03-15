@@ -163,5 +163,6 @@ async def check_street_view_reality(
     analysis["agent"] = "street_view"
     analysis["status"] = "analyzed"
     analysis["address"] = address
+    analysis["street_view_image"] = f"data:image/jpeg;base64,{street_view_b64}"
 
     return analysis
