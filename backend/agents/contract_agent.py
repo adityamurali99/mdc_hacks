@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize the async OpenAI client using your .env file
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SYSTEM_PROMPT = """
@@ -66,6 +65,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         text += page.extract_text() or ""
     return text.strip()
 
+
 async def check_contract(pdf_bytes: bytes) -> dict:
     try:
         lease_text = extract_text_from_pdf(pdf_bytes)
@@ -73,15 +73,18 @@ async def check_contract(pdf_bytes: bytes) -> dict:
         if not lease_text or len(lease_text) < 100:
             return {
                 "agent": "contract",
+                "score": 50,
                 "status": "UNKNOWN",
+                "risk_level": "UNKNOWN",
+                "signatory_name": None,
+                "monthly_rent": None,
                 "findings": ["Could not extract text from PDF. File may be scanned or corrupted."],
                 "summary": "Upload a text-based PDF for analysis."
             }
 
-        # The fast, async OpenAI call using guaranteed JSON format
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
-            response_format={ "type": "json_object" },
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Analyze this lease agreement:\n\n{lease_text[:8000]}"}
@@ -100,6 +103,8 @@ async def check_contract(pdf_bytes: bytes) -> dict:
         )
 
         risk = parsed.get("risk_level", "LOW").upper()
+        score = {"LOW": 80, "MEDIUM": 45, "HIGH": 15}.get(risk, 50)
+
         if risk == "HIGH":
             status = "DANGER"
         elif risk == "MEDIUM":
@@ -109,27 +114,34 @@ async def check_contract(pdf_bytes: bytes) -> dict:
 
         return {
             "agent": "contract",
+            "score": score,
             "status": status,
-            "signatory_name": parsed.get("signatory_name", "Not found"),
-            "monthly_rent": parsed.get("monthly_rent", "Not found"),
-            "lease_term": parsed.get("lease_term", "Not found"),
-            "security_deposit": parsed.get("security_deposit", "Not found"),
+            "risk_level": risk,
+            "signatory_name": parsed.get("signatory_name", None),
+            "monthly_rent": parsed.get("monthly_rent", None),
+            "lease_term": parsed.get("lease_term", None),
+            "security_deposit": parsed.get("security_deposit", None),
             "findings": all_flags,
             "summary": parsed.get("summary", ""),
-            "risk_level": risk
         }
 
     except json.JSONDecodeError:
         return {
             "agent": "contract",
+            "score": 50,
             "status": "UNKNOWN",
+            "risk_level": "UNKNOWN",
+            "signatory_name": None,
             "findings": ["Failed to parse OpenAI response as JSON."],
             "summary": "Internal parsing error. Try again."
         }
     except Exception as e:
         return {
             "agent": "contract",
+            "score": 50,
             "status": "UNKNOWN",
+            "risk_level": "UNKNOWN",
+            "signatory_name": None,
             "findings": [f"Unexpected error: {str(e)}"],
             "summary": "Something went wrong during contract analysis."
         }
